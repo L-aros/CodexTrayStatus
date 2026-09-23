@@ -10,6 +10,7 @@
 点击状态文字直接打开本地网页，**概览、统计、设置全部在浏览器中使用**，不再弹出原生详情小窗口。右键托盘菜单可直达各页面。
 
 - 概览：额度、重置时间、今日 Token、费用分项与七天趋势。
+- 公开重置公告：显示最近一次公开重置、明确排期的公告和近期记录；数据来自 [Codex Resets](https://codex-resets.com)，与个人账号额度分开展示。
 - 统计：今天 / 近 7 天 / 近 30 天及自定义日期，支持模型筛选；分别统计未缓存输入、缓存输入、输出及对应费用，逐日展开模型明细，可导出 CSV。
 - 设置：刷新间隔、剩余/已用口径、开机启动、USD/CNY 币种与参考汇率。设置保存在本机，币种同步到任务栏。
 - 网页仅监听 `127.0.0.1`，使用随机私有路径，页面资源全部内置于 EXE，无 CDN 或 Node.js 运行依赖。关闭浏览器不会退出托盘；退出托盘后网页停止更新。
@@ -29,15 +30,16 @@
 ~~~powershell
 cosign verify-blob .\CodexTrayStatus-Setup.exe `
   --bundle .\CodexTrayStatus-Setup.exe.sigstore.json `
-  --certificate-identity 'https://github.com/L-aros/CodexTrayStatus/.github/workflows/release.yml@refs/tags/v0.4.2' `
+  --certificate-identity 'https://github.com/L-aros/CodexTrayStatus/.github/workflows/release.yml@refs/tags/v0.4.3' `
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
 ~~~
 
-其他版本请将命令中的 `v0.4.2` 改为对应发布标签。Sigstore 文件签名不是 Windows Authenticode 签名，因此 SmartScreen 仍可能显示“未知发布者”。
+其他版本请将命令中的 `v0.4.3` 改为对应发布标签。Sigstore 文件签名不是 Windows Authenticode 签名，因此 SmartScreen 仍可能显示“未知发布者”。
 
 ## 数据与隐私
 
 - 额度：读取 %USERPROFILE%/.codex/auth.json（或 CODEX_HOME/auth.json）中的现有 OAuth 凭据，仅请求 https://chatgpt.com/backend-api/wham/usage。
+- 公开重置公告：本地程序向 `https://codex-resets.com/api/v1/status` 和 `/api/v1/resets?limit=5` 发起不带 Codex 凭据的只读请求，成功结果缓存 15 分钟。公开消息不代表个人账号额度已重置；计划中的公告在确认执行前始终标记为“尚未确认执行”。
 - 回退：官方请求暂时不可用时，从本地 Codex session JSONL 中读取最近一次额度快照。
 - 每日用量：流式扫描 sessions 与 archived_sessions，按本地日期汇总最近 30 天；缓存未变化文件，不再受原先 100 个会话读取上限影响。没有日志记录的日期显示 0，日志已删除或未保存在本机的用量无法还原。
 - 花费：按日志中的模型和内置标准费率估算；它不是账单，长上下文、Fast 模式及特殊计费可能产生差异。
@@ -62,7 +64,7 @@ cosign verify-blob .\CodexTrayStatus-Setup.exe `
 
 ~~~powershell
 ./scripts/test-native.ps1
-./scripts/build-native.ps1 -Version 0.4.2
+./scripts/build-native.ps1 -Version 0.4.3
 # 未安装 NSIS 时只构建独立程序
 ./scripts/build-native.ps1 -SkipInstaller
 ~~~

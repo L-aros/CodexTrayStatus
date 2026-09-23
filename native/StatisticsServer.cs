@@ -25,6 +25,7 @@ namespace CodexTrayStatus
         internal Func<string> RebuildReminders;
         internal Func<string, string, QuotaHistoryResult> QuotaHistoryRequested;
         internal Func<Dictionary<string, ModelPrice>, string> SavePricing;
+        internal Func<Task<ResetAnnouncementsResult>> ResetAnnouncementsRequested;
         private volatile ReminderStatus reminderStatus;
         internal void PublishReminderStatus(ReminderStatus value) { reminderStatus = value; }
         private volatile string preferences = "{}";
@@ -173,6 +174,11 @@ namespace CodexTrayStatus
                         if (path == "api/taskbar-preview") { RespondTaskbar(stream, new JavaScriptSerializer().Deserialize<WebPreferences>(preferences)); return; }
                         if (path == "api/usage") { Respond(stream, 200, "application/json", Encoding.UTF8.GetBytes(json)); return; }
                         if (path == "api/pricing") { Respond(stream, 200, "application/json", Encoding.UTF8.GetBytes(new JavaScriptSerializer().Serialize(PricingCatalog.Snapshot()))); return; }
+                        if (path == "api/reset-announcements" && ResetAnnouncementsRequested != null)
+                        {
+                            ResetAnnouncementsResult announcements = ResetAnnouncementsRequested().GetAwaiter().GetResult();
+                            Respond(stream, 200, "application/json", Encoding.UTF8.GetBytes(new JavaScriptSerializer().Serialize(announcements))); return;
+                        }
                         if (path == "api/quota-history" && QuotaHistoryRequested != null)
                         {
                             string range = QueryValue(query, "range");

@@ -100,9 +100,17 @@ if ($LASTEXITCODE -ne 0) { throw 'Taskbar test compilation failed.' }
 & $taskbarOutput (Join-Path $projectRoot 'artifacts\tests\taskbar')
 if ($LASTEXITCODE -ne 0) { throw 'Taskbar tests failed.' }
 
+$resetOutput = Join-Path $projectRoot 'artifacts\tests\ResetAnnouncementsSmoke.exe'
+$resetArguments = @('/out:' + $resetOutput) + @($arguments | Where-Object { $_ -notlike '/out:*' -and $_ -notlike '*QuotaServiceSmoke.cs' })
+$resetArguments += (Join-Path $projectRoot 'native\ResetAnnouncementsService.cs'), (Join-Path $projectRoot 'tests-native\ResetAnnouncementsSmoke.cs')
+& (Join-Path $frameworkRoot 'csc.exe') $resetArguments
+if ($LASTEXITCODE -ne 0) { throw 'Reset announcement test compilation failed.' }
+& $resetOutput
+if ($LASTEXITCODE -ne 0) { throw 'Reset announcement tests failed.' }
+
 $webOutput = Join-Path $projectRoot 'artifacts\tests\WebDashboardSmoke.exe'
 $webArguments = @("/out:$webOutput") + @($arguments | Where-Object { $_ -notlike '/out:*' -and $_ -notlike '*QuotaServiceSmoke.cs' })
-$webArguments += (Join-Path $projectRoot 'native\StatisticsServer.cs'), (Join-Path $projectRoot 'tests-native\WebDashboardSmoke.cs')
+$webArguments += (Join-Path $projectRoot 'native\StatisticsServer.cs'), (Join-Path $projectRoot 'native\ResetAnnouncementsService.cs'), (Join-Path $projectRoot 'tests-native\WebDashboardSmoke.cs')
 Get-ChildItem -LiteralPath (Join-Path $projectRoot 'native\Statistics') -File | ForEach-Object {
     $webArguments += "/resource:$($_.FullName),Statistics.$($_.Name)"
 }
@@ -115,5 +123,7 @@ $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
 if ($nodeCommand) {
     & $nodeCommand.Source (Join-Path $projectRoot 'tests-native\WebFreshnessSmoke.js')
     if ($LASTEXITCODE -ne 0) { throw 'Web freshness display tests failed.' }
+    & $nodeCommand.Source (Join-Path $projectRoot 'tests-native\WebResetAnnouncementsSmoke.js')
+    if ($LASTEXITCODE -ne 0) { throw 'Public reset display tests failed.' }
 }
 else { Write-Host 'Node is unavailable; optional web display tests skipped.' }

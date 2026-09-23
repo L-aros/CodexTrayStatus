@@ -23,6 +23,7 @@ namespace CodexTrayStatus
         private readonly ToolStripMenuItem usageLine;
         private readonly ToolStripMenuItem autoStartItem;
         private readonly StatisticsServer statistics = new StatisticsServer();
+        private readonly ResetAnnouncementsService resetAnnouncements = new ResetAnnouncementsService();
         private readonly ReminderCoordinator reminders;
         private readonly QuotaHistoryStore quotaHistory;
         private ReminderPreferences reminderPreferences;
@@ -122,6 +123,7 @@ namespace CodexTrayStatus
                 string error = reminders.Rebuild(); ApplySnapshot(); return error;
             })); };
             statistics.QuotaHistoryRequested = delegate(string range, string account) { return quotaHistory.Query(range, account, DataFreshness.Now); };
+            statistics.ResetAnnouncementsRequested = delegate { return resetAnnouncements.GetAsync(); };
             statistics.SavePricing = delegate(System.Collections.Generic.Dictionary<string, ModelPrice> values) { return (string)overlay.Invoke(new Func<string>(delegate { return SavePricingOverrides(values); })); };
             PublishWebPreferences();
 

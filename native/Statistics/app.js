@@ -2,7 +2,7 @@
 const $ = id => document.getElementById(id);
 const fields = ['Input','CachedInput','UncachedInput','Output','TotalTokens','EstimatedCost','CachedInputCost','UncachedInputCost','OutputCost','UnpricedTokens'];
 let data = null, preferences = null, range = 7, selectedRows = [], settingsDirty = false, loading = false, quotaHistory = null, quotaRange = '7d';
-let connected = true;
+let connected = true, resetAnnouncements = null;
 let formBaseline = null, previewSequence = 0, previewTimer = null;
 const dismissedNotices = new Set();
 for (const id of ['freshness','reminder-status']) {
@@ -100,6 +100,38 @@ function renderQuotaHistory() {
   caption.textContent=`${points.length} 个确认观测 · 曲线为已用百分比，虚线表示重置周期变化；缺测不会补线。`;
 }
 async function loadQuotaHistory() { try { quotaHistory=await api(`quota-history?range=${encodeURIComponent(quotaRange)}`);renderQuotaHistory(); } catch { quotaHistory={Available:false};renderQuotaHistory(); } }
+function externalSourceLink(item) {
+  try {
+    const url=new URL(item?.source?.url);
+    if(url.protocol!=='https:')return '';
+    return `<a href="${escapeHtml(url.href)}" target="_blank" rel="noopener noreferrer">查看原始来源 ↗</a>`;
+  } catch { return ''; }
+}
+function resetAnnouncementItem(item, scheduled=false) {
+  if(!item)return '';
+  const type=item.reset_type==='banked'?'储备重置':'常规重置';
+  const date=scheduled?item.scheduled_for||item.announced_at:item.announced_at;
+  const when=date&&Number.isFinite(new Date(date).getTime())?new Date(date).toLocaleString('zh-CN'):'时间未知';
+  const summary=String(item.text||'').trim().slice(0,280);
+  return `<article class="reset-announcement"><div class="reset-announcement-top"><strong>${scheduled?'计划中 · 尚未确认执行':type}</strong><time>${escapeHtml(when)}</time></div><p>${escapeHtml(summary)||'暂无摘要'}</p>${externalSourceLink(item)}</article>`;
+}
+function renderResetAnnouncements() {
+  const target=$('reset-announcements');
+  if(!resetAnnouncements){target.textContent='正在读取公开公告…';return;}
+  if(!resetAnnouncements.Available){target.textContent='公开公告暂时不可用，个人额度显示不受影响。';return;}
+  const status=resetAnnouncements.Status||{}, recent=Array.isArray(resetAnnouncements.Recent)?resetAnnouncements.Recent:[];
+  const latest=status.latest_reset, scheduled=status.scheduled_reset, stats=status.stats||{};
+  const count=stats.total!=null&&Number.isFinite(Number(stats.total))?Number(stats.total):null;
+  const age=stats.days_since_last!=null&&Number.isFinite(Number(stats.days_since_last))?Number(stats.days_since_last).toFixed(1):null;
+  const summary=`累计记录 ${count===null?'--':count} 次 · 距上次约 ${age===null?'--':age} 天${resetAnnouncements.Stale?' · 当前显示缓存':''}`;
+  const history=recent.filter(item=>item?.id!==latest?.id).slice(0,4);
+  target.innerHTML=`<p class="reset-summary">${summary}</p><div class="reset-announcement-grid">${scheduled?resetAnnouncementItem(scheduled,true):''}${latest?resetAnnouncementItem(latest):'<p class="empty">尚无已记录的重置。</p>'}</div>${history.length?`<details class="reset-history"><summary>查看近期公告（${history.length}）</summary><div class="reset-announcement-grid">${history.map(item=>resetAnnouncementItem(item)).join('')}</div></details>`:''}`;
+}
+async function loadResetAnnouncements() {
+  try { resetAnnouncements=await api('reset-announcements'); }
+  catch { resetAnnouncements={Available:false}; }
+  renderResetAnnouncements();
+}
 function selected() {
   const from=$('from').value,to=$('to').value,model=$('model').value;
   return (data?.Daily || []).filter(row=>row.DateLabel>=from&&row.DateLabel<=to).map(row=>{
@@ -278,7 +310,7 @@ $('export').addEventListener('click',()=>{
   const blob=new Blob(['\ufeff'+[columns,...rows].map(row=>row.map(quote).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`codex-usage-${$('from').value}-${$('to').value}.csv`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
-window.addEventListener('hashchange',navigate);navigate();load();setInterval(load,5000);
+window.addEventListener('hashchange',navigate);navigate();load();loadResetAnnouncements();setInterval(load,5000);setInterval(loadResetAnnouncements,15*60*1000);
 window.addEventListener('focus',load);
 setInterval(()=>{if(location.hash==='#settings')taskbarPreview();},1500);
 let displayDay=today();

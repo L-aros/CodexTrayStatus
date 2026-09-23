@@ -1,0 +1,18 @@
+'use strict';
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
+const source=fs.readFileSync(path.join(__dirname,'../native/Statistics/app.js'),'utf8');
+const start=source.indexOf('function externalSourceLink('),end=source.indexOf('function selected()');
+assert.ok(start>=0&&end>start);
+const target={textContent:'',innerHTML:''};
+const context={Date,URL,Number,document:{getElementById(){return target;}}};
+vm.createContext(context);
+vm.runInContext('const $=id=>document.getElementById(id);'+source.match(/const escapeHtml = [^\n]+/)[0]+'let resetAnnouncements=null;'+source.slice(start,end),context);
+vm.runInContext(`resetAnnouncements={Available:true,Status:{latest_reset:{id:'one',reset_type:'regular',announced_at:'2026-09-23T12:00:00Z',text:'<img src=x onerror=alert(1)>',source:{url:'javascript:alert(1)'}},scheduled_reset:{id:'two',reset_type:'banked',announced_at:'2026-09-23T12:00:00Z',scheduled_for:'2026-09-24T12:00:00Z',text:'Scheduled',source:{url:'https://x.com/example'}},stats:{total:4,days_since_last:null}},Recent:[]};renderResetAnnouncements();`,context);
+assert.match(target.innerHTML,/计划中 · 尚未确认执行/);
+assert.match(target.innerHTML,/&lt;img src=x onerror=alert\(1\)&gt;/);
+assert.doesNotMatch(target.innerHTML,/<img|javascript:/);
+assert.match(target.innerHTML,/https:\/\/x.com\/example/);
+assert.match(target.innerHTML,/距上次约 -- 天/);
+vm.runInContext('resetAnnouncements={Available:false};renderResetAnnouncements();',context);
+assert.match(target.textContent,/暂时不可用/);
+console.log('Public reset display tests passed.');

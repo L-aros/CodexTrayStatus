@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Threading.Tasks;
 using CodexTrayStatus;
 
 namespace CodexTrayStatus.Tests
@@ -35,6 +36,7 @@ internal static class WebDashboardSmoke
                 };
             };
             server.SavePricing = delegate(Dictionary<string, ModelPrice> prices) { PricingCatalog.Replace(prices); return null; };
+            server.ResetAnnouncementsRequested = delegate { return Task.FromResult(new ResetAnnouncementsResult { Available = true, Status = new { latest_reset = new { id = "fixture-reset" } }, Recent = new object[0] }); };
             server.PublishReminderStatus(new ReminderStatus { StorageAvailable = true });
             int refreshes = 0;
             server.RefreshRequested = delegate { refreshes++; };
@@ -59,6 +61,7 @@ internal static class WebDashboardSmoke
                 Check(client.DownloadString(server.Url).Contains("settings-form"), "The embedded page must include settings");
                 Check(client.DownloadString(server.Url + "app.js").Contains("CachedInput"), "The script must be served");
                 Check(client.DownloadString(server.Url + "api/usage").Contains("gpt-5.6-sol"), "API must contain model breakdowns");
+                Check(client.DownloadString(server.Url + "api/reset-announcements").Contains("fixture-reset"), "Public reset announcements are served separately from account usage");
                 client.Headers["Origin"] = new Uri(server.Url).GetLeftPart(UriPartial.Authority);
                 client.Headers["Content-Type"] = "application/json";
                 string priced = client.UploadString(server.Url + "api/pricing", "POST", "{\"fixture-model\":{\"Input\":2,\"Cached\":0.2,\"Output\":4}}");

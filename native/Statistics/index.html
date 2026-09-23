@@ -4,7 +4,7 @@
 <body>
 <aside class="sidebar"><a class="brand" href="#overview"><span class="logo">◈</span> Codex<span class="brand-small">TRAY STATUS</span></a>
 <div class="nav-label">工作空间</div><nav aria-label="主导航"><a href="#overview" data-page="overview"><span>◫</span>用量概览</a><a href="#statistics" data-page="statistics"><span>▥</span>详细统计</a><a href="#settings" data-page="settings"><span>⚙</span>设置</a></nav>
-<div class="sidebar-bottom"><span class="status-dot"></span> 本地运行<div>数据保留在这台电脑上</div><small>Codex Tray Status · 0.4.2</small></div></aside>
+<div class="sidebar-bottom"><span class="status-dot"></span> 本地运行<div>数据保留在这台电脑上</div><small>Codex Tray Status · 0.4.3</small></div></aside>
 <main><header class="topbar"><span>工作空间 <span class="slash">/</span> <span id="breadcrumb">用量概览</span></span><div class="header-actions"><label class="sr-only" for="currency">币种</label><select id="currency"><option value="USD">$ 美元 USD</option><option value="CNY">¥ 人民币 CNY</option></select><button id="refresh">↻ 刷新数据</button></div></header>
 <div class="content"><div id="notice" class="notice" role="status" hidden></div>
 <div class="status-notices"><div id="freshness" class="notice dismissible-notice" role="status"><span id="freshness-text"></span><button type="button" class="notice-dismiss" data-dismiss="freshness" aria-label="关闭数据状态提示" title="关闭">×</button></div>
@@ -13,6 +13,7 @@
 <div id="quota" class="quota-grid"></div><div class="section-heading"><h2>今日用量</h2><a href="#statistics">查看完整统计 ↗</a></div><div id="today-cards" class="metrics"></div>
 
 <div class="panel quota-history-panel"><div class="panel-heading"><div><h2>额度历史</h2><p id="quota-history-caption">仅记录确认的在线额度观测；缺测不会补线。</p></div><div class="segments" aria-label="额度历史范围"><button data-quota-range="24h">24 小时</button><button data-quota-range="7d" class="active">7 天</button><button data-quota-range="30d">30 天</button><button data-quota-range="90d">90 天</button></div></div><div id="quota-history" class="quota-history" role="img" aria-label="额度历史图"></div></div>
+<div class="panel reset-announcements-panel"><div class="panel-heading"><div><h2>公开重置公告</h2><p>第三方汇总的公开消息，不代表你的账号额度已重置。</p></div><a href="https://codex-resets.com" target="_blank" rel="noopener noreferrer">数据来源：Codex Resets ↗</a></div><div id="reset-announcements" class="reset-announcements" role="status">正在读取公开公告…</div></div>
 <div class="panel"><div class="panel-heading"><div><h2>最近 7 天</h2><p>每日 Token 组成</p></div><div class="legend"><span class="uncached">未缓存输入</span><span class="cached">缓存输入</span><span class="output">输出</span></div></div><div id="overview-chart" class="chart"></div></div>
 <div class="panel"><div class="panel-heading"><h2>今日模型用量</h2><span>按估算费用排序</span></div><div id="today-models" class="table-wrap"></div></div></section>
 <section id="statistics" class="page" hidden><div class="heading"><div><p class="eyebrow">EVERY TOKEN COUNTS</p><h1>详细统计</h1><p class="subtitle">按日期、模型与缓存类型，了解每一笔用量。</p></div><span class="updated"></span></div>
