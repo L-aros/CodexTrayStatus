@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Codex · 用量面板</title><link rel="stylesheet" href="style.css"><script src="app.js" defer></script></head>
+<body>
+<aside class="sidebar"><a class="brand" href="#overview"><span class="logo">◈</span> Codex<span class="brand-small">TRAY STATUS</span></a>
+<div class="nav-label">工作空间</div><nav aria-label="主导航"><a href="#overview" data-page="overview"><span>◫</span>用量概览</a><a href="#statistics" data-page="statistics"><span>▥</span>详细统计</a><a href="#settings" data-page="settings"><span>⚙</span>设置</a></nav>
+<div class="sidebar-bottom"><span class="status-dot"></span> 本地运行<div>数据保留在这台电脑上</div><small>Codex Tray Status · 0.4.0</small></div></aside>
+<main><header class="topbar"><span>工作空间 <span class="slash">/</span> <span id="breadcrumb">用量概览</span></span><div class="header-actions"><label class="sr-only" for="currency">币种</label><select id="currency"><option value="USD">$ 美元 USD</option><option value="CNY">¥ 人民币 CNY</option></select><button id="refresh">↻ 刷新数据</button></div></header>
+<div class="content"><div id="notice" class="notice" role="status" hidden></div><div id="freshness" class="notice" role="status"></div>
+<div id="reminder-status" class="notice" role="status"></div>
+<section id="overview" class="page"><div class="heading"><div><p class="eyebrow">YOUR USAGE, AT A GLANCE</p><h1>用量概览<span class="live-pill">实时概览</span></h1><p class="subtitle">额度、Token 与费用，一目了然。</p></div><span class="updated"></span></div>
+<div id="quota" class="quota-grid"></div><div class="section-heading"><h2>今日用量</h2><a href="#statistics">查看完整统计 ↗</a></div><div id="today-cards" class="metrics"></div>
+<div class="panel"><div class="panel-heading"><div><h2>额度消耗预测</h2><p>仅按当前周期内确认的在线观测估算。</p></div></div><div id="quota-forecast" class="metrics"></div></div>
+
+<div class="panel quota-history-panel"><div class="panel-heading"><div><h2>额度历史</h2><p id="quota-history-caption">仅记录确认的在线额度观测；缺测不会补线。</p></div><div class="segments" aria-label="额度历史范围"><button data-quota-range="24h">24 小时</button><button data-quota-range="7d" class="active">7 天</button><button data-quota-range="30d">30 天</button><button data-quota-range="90d">90 天</button></div></div><div id="quota-history" class="quota-history" role="img" aria-label="额度历史图"></div></div>
+<div class="panel"><div class="panel-heading"><div><h2>最近 7 天</h2><p>每日 Token 组成</p></div><div class="legend"><span class="uncached">未缓存输入</span><span class="cached">缓存输入</span><span class="output">输出</span></div></div><div id="overview-chart" class="chart"></div></div>
+<div class="panel"><div class="panel-heading"><h2>今日模型用量</h2><span>按估算费用排序</span></div><div id="today-models" class="table-wrap"></div></div></section>
+<section id="statistics" class="page" hidden><div class="heading"><div><p class="eyebrow">EVERY TOKEN COUNTS</p><h1>详细统计</h1><p class="subtitle">按日期、模型与缓存类型，了解每一笔用量。</p></div><span class="updated"></span></div>
+<div class="filters"><div class="segments" aria-label="统计范围"><button data-days="1">今天</button><button data-days="7" class="active">近 7 天</button><button data-days="30">近 30 天</button><button data-days="90">近 90 天</button></div><label>从 <input type="date" id="from"></label><label>至 <input type="date" id="to"></label><label class="model-filter">模型 <select id="model"><option value="">全部模型</option></select></label></div>
+<div id="stats-cards" class="metrics"></div><div class="panel"><div class="panel-heading"><div><h2>用量趋势</h2><p id="range-caption"></p></div><div class="legend"><span class="uncached">未缓存输入</span><span class="cached">缓存输入</span><span class="output">输出</span></div></div><div id="stats-chart" class="chart"></div></div>
+<div class="panel"><div class="panel-heading"><div><h2>模型明细</h2><p>费用分项与 Token 分项一一对应</p></div><span class="currency-caption"></span></div><div id="models-table" class="table-wrap"></div></div>
+<div class="panel"><div class="panel-heading"><div><h2>每日明细</h2><p>展开日期，查看当天各模型用量</p></div><button id="export">↓ 导出 CSV</button></div><div id="daily-table" class="table-wrap"></div></div></section>
+<div class="panel"><div class="panel-heading"><div><h2>会话用量排行</h2><p>仅汇总 Token、模型、缓存和费用，不展示聊天正文。</p></div></div><div id="session-rankings" class="table-wrap"></div></div>
+<section id="settings" class="page" hidden><div class="heading"><div><p class="eyebrow">MAKE IT YOURS</p><h1>设置</h1><p class="subtitle">网页与任务栏共享设置，保存后立即生效。</p></div></div>
+<form id="settings-form" class="settings-form"><div class="panel"><h2>费用与币种</h2><div class="setting-row"><div><label for="settings-currency">显示币种</label><p>概览、统计明细与任务栏统一显示</p></div><select id="settings-currency"><option value="USD">美元 USD</option><option value="CNY">人民币 CNY</option></select></div><div class="setting-row"><div><label for="exchange">美元兑人民币汇率</label><p>1 USD = 此数值 CNY。手动参考汇率，非实时行情。</p></div><input id="exchange" type="number" min="0.01" max="100" step="0.0001" required></div></div>
+<div class="panel" id="pricing-settings"><h2>模型费率覆盖</h2><p>每行一个模型：模型名、未缓存输入、缓存输入、输出（USD / 1M Token）。保存后历史费用按当前费率重算；未知模型未填写时保持待定价。</p><textarea id="pricing-json" rows="5" spellcheck="false" aria-label="模型费率 JSON"></textarea><button id="pricing-save" type="button">保存费率覆盖</button><button id="pricing-reset" type="button">恢复内置费率</button><span id="pricing-status" role="status"></span></div>
+<div class="panel" id="taskbar-settings"><h2>任务栏显示</h2><p>保存后立即应用。空间不足时自动精简文字，完整数值仍可在概览查看。</p>
+<div class="setting-row"><label for="taskbar-mode">额度窗口</label><select id="taskbar-mode"><option value="default">默认优先（5 小时）</option><option value="selected">指定窗口</option><option value="minimum">剩余最少</option></select></div>
+<div class="setting-row"><label for="taskbar-window">指定额度窗口</label><select id="taskbar-window" disabled></select></div>
+<div class="setting-row"><label for="taskbar-cost">显示今日估算费用</label><input id="taskbar-cost" type="checkbox" role="switch"></div>
+<div class="setting-row"><label for="taskbar-countdown">显示重置倒计时</label><input id="taskbar-countdown" type="checkbox" role="switch"></div>
+<p>剩余最少只比较新鲜、完整且已知的百分比；本地数据标注“参考”，旧值不参与比较。所选窗口消失后保留选择。</p>
+<div id="taskbar-preview" aria-label="任务栏文字预览"><div><span id="taskbar-preview-prefix"></span><strong id="taskbar-preview-percent">--</strong></div><div id="taskbar-preview-secondary"></div></div>
+<p id="taskbar-preview-status" role="status">等待预览</p><p id="taskbar-settings-error" role="status" hidden></p>
+</div>
+<div class="panel" id="reminder-settings"><h2>额度提醒</h2><p>仅在在线新数据确认后提醒；每个账号、窗口、周期独立去重。首次发现低额度会提醒一次。</p>
+<div class="setting-row"><label for="reminder-enabled">开启额度提醒</label><input id="reminder-enabled" type="checkbox" role="switch"></div>
+<div class="setting-row"><label for="reminder-20">剩余 20%</label><input id="reminder-20" type="checkbox"></div>
+<div class="setting-row"><label for="reminder-10">剩余 10%</label><input id="reminder-10" type="checkbox"></div>
+<div class="setting-row"><label for="reminder-0">剩余 0%（耗尽）</label><input id="reminder-0" type="checkbox"></div>
+<div class="setting-row"><div><label for="reminder-recovery">恢复提醒</label><p>从低额度（≤20%）恢复至 ≥22% 时提醒；仅到重置时间不会提醒。</p></div><input id="reminder-recovery" type="checkbox" role="switch"></div>
+<div class="setting-row"><label for="reminder-quiet">每天定时免打扰</label><input id="reminder-quiet" type="checkbox" role="switch"></div>
+<div class="setting-row"><label for="reminder-start">开始时间（本地时间）</label><input id="reminder-start" type="time" required></div>
+<div class="setting-row"><label for="reminder-end">结束时间（可跨午夜）</label><input id="reminder-end" type="time" required></div>
+<div class="setting-row"><div><label for="reminder-snooze">临时暂停</label><p>关闭和免打扰期间继续记录状态，结束后不补发积压提醒。设置需保存生效。</p></div><select id="reminder-snooze"><option value="keep">保持当前暂停时间</option><option value="hour">暂停 1 小时</option><option value="tomorrow">直到明天 08:00</option><option value="resume">取消临时暂停</option></select></div>
+<button id="reminder-rebuild" type="button" hidden>重建提醒状态</button><p id="reminder-rebuild-help" hidden>重建后首次在线观测仅建立基线，不补发旧提醒。</p><span id="reminder-action-status" role="status"></span>
+</div>
+<div class="panel"><h2>刷新与显示</h2><div class="setting-row"><div><label for="interval">自动刷新间隔</label><p>托盘获取新数据后，网页自动同步</p></div><select id="interval"><option value="30">30 秒</option><option value="60">1 分钟</option><option value="300">5 分钟</option></select></div><div class="setting-row"><div><label for="remaining">额度显示口径</label><p>同时应用于概览额度卡片与任务栏</p></div><select id="remaining"><option value="true">剩余百分比</option><option value="false">已用百分比</option></select></div><div class="setting-row"><div><label for="autostart">开机启动</label><p>登录 Windows 后自动启动托盘程序</p></div><input id="autostart" type="checkbox" role="switch"></div></div><button class="primary" type="submit">保存设置</button><span id="save-status" role="status"></span></form>
+<div class="panel about"><h2>统计口径</h2><p>总 Token = 未缓存输入 + 缓存输入 + 输出。缓存输入属于输入的一部分，不会重复计数。输出已包含推理 Token，不再次累加。</p><p>费用使用内置模型标准单价估算，不是订阅实际扣款。未包含 Fast、长上下文等额外系数；未知费率模型保留 Token，费用显示待定价。历史用量按当前内置标准价折算。</p><p>当前展示最近 30 天本机保留的会话日志；无记录日期显示 0。删除或未同步到本机的日志无法还原。</p><p>费率核对：2026-09-06 · <a href="https://help.openai.com/en/articles/20001415-chatgpt-rate-card-enterprise-token-based-pricing" target="_blank" rel="noreferrer">OpenAI 标准费率 ↗</a></p></div></section>
+<footer><span>本机日志统计 · 标准价估算，非实际账单</span><span id="fx-caption">USD</span></footer></div></main>
+</body></html>

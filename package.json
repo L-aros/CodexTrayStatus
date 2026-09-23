@@ -1,0 +1,33 @@
+{
+  "name": "codex-tray-status",
+  "version": "0.1.1",
+  "private": true,
+  "description": "A Windows-first system-tray monitor for Codex rate limits.",
+  "author": "Codex Tray Status contributors",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "dist:win": "electron-builder --win portable",
+    "dist:mac": "electron-builder --mac dmg"
+  },
+  "devDependencies": {
+    "electron": "^39.2.6",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.codextraystatus.app",
+    "productName": "Codex Tray Status",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.developer-tools"
+    }
+  }
+}

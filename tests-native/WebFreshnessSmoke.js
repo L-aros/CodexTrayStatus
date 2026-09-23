@@ -1,0 +1,21 @@
+'use strict';
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
+const source=fs.readFileSync(path.join(__dirname,'../native/Statistics/app.js'),'utf8');
+const elements=new Map();
+const context={Date,Intl,console,document:{getElementById(id){if(!elements.has(id))elements.set(id,{textContent:''});return elements.get(id);},querySelectorAll(){return [];}}};
+vm.createContext(context);
+// Execute the actual display functions without starting polling or a real server.
+vm.runInContext(source.slice(0,source.indexOf('const num =')),context);
+vm.runInContext(`data={RefreshState:{AttemptedAt:Date.now(),IsRefreshing:true},QuotaState:{Source:'local',Scope:'unattributed_local_quota',Delivery:'fallback',ObservedAt:Date.now()-3600000,ErrorCode:'official_failed'},QuotaValidity:[{HasValue:true,IsFresh:false,ExpiresAt:Date.now()-1}],UsageState:{Source:'local',Scope:'local_logs',Delivery:'updated',LastSuccessAt:Date.now()},UsageValidity:{HasValue:true,IsFresh:true,ExpiresAt:Date.now()+1000}};freshness();`,context);
+assert.match(elements.get('freshness').textContent,/本地回退.*已过期.*账号未知/);
+assert.match(elements.get('freshness').textContent,/统计成功/);
+assert.match(elements.get('freshness').textContent,/刷新中/);
+assert.doesNotMatch(elements.get('freshness').textContent,/official_failed/);
+vm.runInContext(`connected=false;data.QuotaState={Source:'official',Scope:'account',AccountKey:'hash',Delivery:'retained'};freshness();`,context);
+assert.match(elements.get('freshness').textContent,/连接中断.*保留旧值/);
+vm.runInContext(`connected=true;data.QuotaState.Delivery='updated';data.QuotaValidity[0]={HasValue:true,IsFresh:true,ExpiresAt:Date.now()+900000};freshness();`,context);
+assert.match(elements.get('freshness').textContent,/在线获取/);
+assert.doesNotMatch(elements.get('freshness').textContent,/连接中断|保留旧值|已过期/);
+vm.runInContext(`data.QuotaValidity[0].ExpiresAt=Date.now()-1;freshness();`,context);
+assert.match(elements.get('freshness').textContent,/已过期/);
+console.log('Web freshness display tests passed.');
