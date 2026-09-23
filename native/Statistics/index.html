@@ -4,7 +4,7 @@
 <body>
 <aside class="sidebar"><a class="brand" href="#overview"><span class="logo">◈</span> Codex<span class="brand-small">TRAY STATUS</span></a>
 <div class="nav-label">工作空间</div><nav aria-label="主导航"><a href="#overview" data-page="overview"><span>◫</span>用量概览</a><a href="#statistics" data-page="statistics"><span>▥</span>详细统计</a><a href="#settings" data-page="settings"><span>⚙</span>设置</a></nav>
-<div class="sidebar-bottom"><span class="status-dot"></span> 本地运行<div>数据保留在这台电脑上</div><small>Codex Tray Status · 0.4.3</small></div></aside>
+<div class="sidebar-bottom"><span class="status-dot"></span> 本地运行<div>数据保留在这台电脑上</div><small>Codex Tray Status · 0.4.4</small></div></aside>
 <main><header class="topbar"><span>工作空间 <span class="slash">/</span> <span id="breadcrumb">用量概览</span></span><div class="header-actions"><label class="sr-only" for="currency">币种</label><select id="currency"><option value="USD">$ 美元 USD</option><option value="CNY">¥ 人民币 CNY</option></select><button id="refresh">↻ 刷新数据</button></div></header>
 <div class="content"><div id="notice" class="notice" role="status" hidden></div>
 <div class="status-notices"><div id="freshness" class="notice dismissible-notice" role="status"><span id="freshness-text"></span><button type="button" class="notice-dismiss" data-dismiss="freshness" aria-label="关闭数据状态提示" title="关闭">×</button></div>
@@ -23,15 +23,16 @@
 <div class="panel"><div class="panel-heading"><div><h2>每日明细</h2><p>展开日期，查看当天各模型用量</p></div><button id="export">↓ 导出 CSV</button></div><div id="daily-table" class="table-wrap"></div></div></section>
 <section id="settings" class="page" hidden><div class="heading"><div><p class="eyebrow">MAKE IT YOURS</p><h1>设置</h1><p class="subtitle">网页与任务栏共享设置，保存后立即生效。</p></div></div>
 <form id="settings-form" class="settings-form"><div class="panel"><h2>费用与币种</h2><div class="setting-row"><div><label for="settings-currency">显示币种</label><p>概览、统计明细与任务栏统一显示</p></div><select id="settings-currency"><option value="USD">美元 USD</option><option value="CNY">人民币 CNY</option></select></div><div class="setting-row"><div><label for="exchange">美元兑人民币汇率</label><p>1 USD = 此数值 CNY。手动参考汇率，非实时行情。</p></div><input id="exchange" type="number" min="0.01" max="100" step="0.0001" required></div></div>
-<div class="panel" id="pricing-settings"><h2>模型费率覆盖</h2><p>每行一个模型：模型名、未缓存输入、缓存输入、输出（USD / 1M Token）。保存后历史费用按当前费率重算；未知模型未填写时保持待定价。</p><textarea id="pricing-json" rows="5" spellcheck="false" aria-label="模型费率 JSON"></textarea><button id="pricing-save" type="button">保存费率覆盖</button><button id="pricing-reset" type="button">恢复内置费率</button><span id="pricing-status" role="status"></span></div>
-<div class="panel" id="taskbar-settings"><h2>任务栏显示</h2><p>保存后立即应用。空间不足时自动精简文字，完整数值仍可在概览查看。</p>
+<div class="panel" id="pricing-settings"><div class="panel-heading"><div><h2>模型费率覆盖</h2><p>每行一个模型：模型名、未缓存输入、缓存输入、输出（USD / 1M Token）。保存后历史费用按当前费率重算；未知模型未填写时保持待定价。</p></div></div>
+<div class="settings-panel-body"><textarea id="pricing-json" rows="5" spellcheck="false" aria-label="模型费率 JSON"></textarea><div class="settings-actions"><button id="pricing-save" type="button">保存费率覆盖</button><button id="pricing-reset" type="button">恢复内置费率</button><span id="pricing-status" role="status"></span></div></div></div>
+<div class="panel" id="taskbar-settings"><div class="panel-heading"><div><h2>任务栏显示</h2><p>保存后立即应用。空间不足时自动精简文字，完整数值仍可在概览查看。</p></div></div>
 <div class="setting-row"><label for="taskbar-mode">额度窗口</label><select id="taskbar-mode"><option value="default">默认优先（5 小时）</option><option value="selected">指定窗口</option><option value="minimum">剩余最少</option></select></div>
 <div class="setting-row"><label for="taskbar-window">指定额度窗口</label><select id="taskbar-window" disabled></select></div>
 <div class="setting-row"><label for="taskbar-cost">显示今日估算费用</label><input id="taskbar-cost" type="checkbox" role="switch"></div>
 <div class="setting-row"><label for="taskbar-countdown">显示重置倒计时</label><input id="taskbar-countdown" type="checkbox" role="switch"></div>
-<p>剩余最少只比较新鲜、完整且已知的百分比；本地数据标注“参考”，旧值不参与比较。所选窗口消失后保留选择。</p>
+<div class="settings-panel-body"><p class="settings-help">剩余最少只比较新鲜、完整且已知的百分比；本地数据标注“参考”，旧值不参与比较。所选窗口消失后保留选择。</p>
 <div id="taskbar-preview" aria-label="任务栏文字预览"><div><span id="taskbar-preview-prefix"></span><strong id="taskbar-preview-percent">--</strong></div><div id="taskbar-preview-secondary"></div></div>
-<p id="taskbar-preview-status" role="status">等待预览</p><p id="taskbar-settings-error" role="status" hidden></p>
+<p id="taskbar-preview-status" role="status">等待预览</p><p id="taskbar-settings-error" role="status" hidden></p></div>
 </div>
 <div class="panel" id="reminder-settings"><h2>额度提醒</h2><p>仅在在线新数据确认后提醒；每个账号、窗口、周期独立去重。首次发现低额度会提醒一次。</p>
 <div class="setting-row"><label for="reminder-enabled">开启额度提醒</label><input id="reminder-enabled" type="checkbox" role="switch"></div>
