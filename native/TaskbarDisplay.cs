@@ -208,7 +208,7 @@ namespace CodexTrayStatus
                 if (settings.ShowCost == true)
                 {
                     string amount;
-                    try { amount = (today.UnpricedTokens > 0 ? "≥" : "") + (preferences.Currency == "CNY" ? "¥" : "$") + (today.EstimatedCost * (preferences.Currency == "CNY" ? preferences.ExchangeRate : 1m)).ToString("0.00", CultureInfo.InvariantCulture); }
+                    try { amount = (preferences.Currency == "CNY" ? "¥" : "$") + (today.EstimatedCost * (preferences.Currency == "CNY" ? preferences.ExchangeRate : 1m)).ToString("0.00", CultureInfo.InvariantCulture); }
                     catch (OverflowException) { amount = "费用过大"; }
                     result.Secondary += " · " + amount;
                 }

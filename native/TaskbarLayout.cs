@@ -72,7 +72,7 @@ namespace CodexTrayStatus
                 graphics.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
                 graphics.TextContrast = 2;
                 graphics.DrawString(Prefix, MainFont, primary, PrefixBounds.Location, format);
-                graphics.DrawString(Percent, PercentFont, highlight, new PointF(PercentBounds.X, PercentBounds.Y - 1), format);
+                graphics.DrawString(Percent, PercentFont, highlight, PercentBounds.Location, format);
                 if (Secondary.Length > 0) graphics.DrawString(Secondary, DetailFont, muted, SecondaryBounds.Location, format);
             }
             return bitmap;

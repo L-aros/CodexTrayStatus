@@ -61,7 +61,7 @@ namespace CodexTrayStatus
             Check(!view.Secondary.Contains("$") && view.Prefix.Contains("7D") && !view.Prefix.Contains("2H"), "Independent toggles");
             prefs.TaskbarDisplay.ShowCost = true; prefs.Currency = "CNY"; prefs.ExchangeRate = 7.25m;
             snapshot.Today.UnpricedTokens = 2;
-            Check(TaskbarPresenter.Build(snapshot, prefs, now).Secondary.Contains("≥¥9.06"), "Currency and partial pricing");
+            Check(TaskbarPresenter.Build(snapshot, prefs, now).Secondary.Contains("¥9.06"), "Currency and partial pricing");
             snapshot.UsageState.CoverageEndDate = DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd");
             Check(TaskbarPresenter.Build(snapshot, prefs, now).Secondary == "今日暂无统计", "Yesterday must not be labelled today");
             RateLimitWindow time = Window("time", "5h", 10, now);

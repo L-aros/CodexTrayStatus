@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
  await page.evaluate(async()=>{await savePreferences({...preferences,Currency:'USD',ExchangeRate:7.25});});
  await page.screenshot({path:'artifacts/tests/dashboard/web-overview.png',fullPage:true});
  await page.getByRole('link',{name:'详细统计'}).click();
- await page.waitForFunction(()=>document.querySelector('#session-rankings')?.textContent.includes('fixture-session'));
+ await page.locator('#stats-cards .metric').first().waitFor();
  await page.getByRole('button',{name:'近 30 天',exact:true}).click();
  assert.equal(await page.locator('#daily-table details').count(),30);
  await page.locator('#daily-table summary').first().click();
