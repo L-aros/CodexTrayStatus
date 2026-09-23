@@ -24,9 +24,7 @@ namespace CodexTrayStatus
         internal Action RefreshRequested;
         internal Func<string> RebuildReminders;
         internal Func<string, string, QuotaHistoryResult> QuotaHistoryRequested;
-        internal Func<AppSnapshot, List<QuotaForecast>> QuotaForecastRequested;
         internal Func<Dictionary<string, ModelPrice>, string> SavePricing;
-        internal Func<List<UsageRank>> UsageRanksRequested;
         private volatile ReminderStatus reminderStatus;
         internal void PublishReminderStatus(ReminderStatus value) { reminderStatus = value; }
         private volatile string preferences = "{}";
@@ -52,7 +50,7 @@ namespace CodexTrayStatus
                 QuotaValidity = validity, UsageValidity = DataFreshness.EvaluateUsage(snapshot.UsageState, snapshot.Daily != null, now), EvaluatedAt = now,
                 Daily = snapshot.Daily, RefreshedAt = snapshot.RefreshedAt, Error = snapshot.Error ?? (snapshot.Quota == null ? null : snapshot.Quota.Warning),
                 Quota = snapshot.Quota == null ? null : snapshot.Quota.Limits, Today = snapshot.UsageState != null && snapshot.UsageState.CoverageEndDate != DateTime.Today.ToString("yyyy-MM-dd") ? null : snapshot.Today,
-                LocalDate = DateTime.Today.ToString("yyyy-MM-dd"), PricingDate = "2026-09-06", QuotaForecast = QuotaForecastRequested == null ? null : QuotaForecastRequested(snapshot)
+                LocalDate = DateTime.Today.ToString("yyyy-MM-dd"), PricingDate = "2026-09-06"
             });
         }
 
@@ -175,7 +173,6 @@ namespace CodexTrayStatus
                         if (path == "api/taskbar-preview") { RespondTaskbar(stream, new JavaScriptSerializer().Deserialize<WebPreferences>(preferences)); return; }
                         if (path == "api/usage") { Respond(stream, 200, "application/json", Encoding.UTF8.GetBytes(json)); return; }
                         if (path == "api/pricing") { Respond(stream, 200, "application/json", Encoding.UTF8.GetBytes(new JavaScriptSerializer().Serialize(PricingCatalog.Snapshot()))); return; }
-                        if (path == "api/rankings" && UsageRanksRequested != null) { Respond(stream, 200, "application/json", Encoding.UTF8.GetBytes(new JavaScriptSerializer { MaxJsonLength = int.MaxValue }.Serialize(UsageRanksRequested()))); return; }
                         if (path == "api/quota-history" && QuotaHistoryRequested != null)
                         {
                             string range = QueryValue(query, "range");

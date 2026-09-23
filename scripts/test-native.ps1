@@ -28,7 +28,6 @@ $arguments = @(
     (Join-Path $projectRoot "native\ReminderStateStore.cs"),
     (Join-Path $projectRoot "native\DataFreshness.cs"),
     (Join-Path $projectRoot "native\QuotaHistoryStore.cs"),
-    (Join-Path $projectRoot "native\QuotaForecastService.cs"),
     (Join-Path $projectRoot "native\PricingCatalog.cs"),
     (Join-Path $projectRoot "native\QuotaService.cs"),
     (Join-Path $projectRoot "tests-native\QuotaServiceSmoke.cs")
@@ -54,13 +53,6 @@ $historyArguments += (Join-Path $projectRoot 'tests-native\QuotaHistorySmoke.cs'
 if ($LASTEXITCODE -ne 0) { throw 'Quota history test compilation failed.' }
 & $historyOutput
 if ($LASTEXITCODE -ne 0) { throw 'Quota history tests failed.' }
-
-$forecastOutput = Join-Path $projectRoot 'artifacts\tests\QuotaForecastSmoke.exe'
-$forecastArguments = @("/out:$forecastOutput") + @($arguments | Where-Object { $_ -notlike '/out:*' -and $_ -notlike '*QuotaServiceSmoke.cs' }) + (Join-Path $projectRoot 'tests-native\QuotaForecastSmoke.cs')
-& (Join-Path $frameworkRoot 'csc.exe') $forecastArguments
-if ($LASTEXITCODE -ne 0) { throw 'Quota forecast test compilation failed.' }
-& $forecastOutput
-if ($LASTEXITCODE -ne 0) { throw 'Quota forecast tests failed.' }
 
 $reminderOutput = Join-Path $projectRoot 'artifacts\tests\ReminderServiceSmoke.exe'
 $reminderArguments = @("/out:$reminderOutput") + @($arguments | Where-Object { $_ -notlike '/out:*' -and $_ -notlike '*QuotaServiceSmoke.cs' })

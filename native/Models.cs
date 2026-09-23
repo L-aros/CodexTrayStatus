@@ -116,6 +116,4 @@ namespace CodexTrayStatus
         public System.Collections.Generic.List<QuotaHistoryPoint> Points { get; set; }
         public QuotaHistoryResult() { Points = new System.Collections.Generic.List<QuotaHistoryPoint>(); }
     }
-    public sealed class QuotaForecast { public string WindowKey { get; set; } public double UsedPercentPerHour { get; set; } public long EstimatedExhaustedAt { get; set; } public long ResetsAt { get; set; } public int SampleCount { get; set; } public string Status { get; set; } }
-    public sealed class UsageRank : TodayUsage { public string Session { get; set; } public string Project { get; set; } public System.Collections.Generic.List<ModelUsage> Models { get; set; } public System.Collections.Generic.List<DailyUsage> Daily { get; set; } public UsageRank(){Models=new System.Collections.Generic.List<ModelUsage>();Daily=new System.Collections.Generic.List<DailyUsage>();} }
 }

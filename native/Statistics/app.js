@@ -1,9 +1,20 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const fields = ['Input','CachedInput','UncachedInput','Output','TotalTokens','EstimatedCost','CachedInputCost','UncachedInputCost','OutputCost','UnpricedTokens'];
-let data = null, preferences = null, range = 7, selectedRows = [], settingsDirty = false, loading = false, quotaHistory = null, quotaRange = '7d', usageRanks=[];
+let data = null, preferences = null, range = 7, selectedRows = [], settingsDirty = false, loading = false, quotaHistory = null, quotaRange = '7d';
 let connected = true;
 let formBaseline = null, previewSequence = 0, previewTimer = null;
+const dismissedNotices = new Set();
+for (const id of ['freshness','reminder-status']) {
+  try { if(sessionStorage.getItem('dismissed-'+id)==='1') dismissedNotices.add(id); } catch (_) {}
+  $(id).hidden=dismissedNotices.has(id);
+}
+document.querySelectorAll('[data-dismiss]').forEach(button=>button.addEventListener('click',()=>{
+  const id=button.dataset.dismiss;
+  dismissedNotices.add(id);
+  $(id).hidden=true;
+  try { sessionStorage.setItem('dismissed-'+id,'1'); } catch (_) {}
+}));
 function acceptPreferences(next) {
   if(!preferences || (next.Revision || 0) >= (preferences.Revision || 0)) preferences=next;
 }
@@ -18,7 +29,7 @@ function stateLabel(state, validity) {
 function freshness() {
   if(!data)return;
   const q=data.QuotaState,u=data.UsageState,r=data.RefreshState;
-  $('freshness').textContent=(connected?'':'托盘连接中断 · ')+
+  $('freshness-text').textContent=(connected?'':'托盘连接中断 · ')+
     '额度：'+stateLabel(q,data.QuotaValidity?.[0])+'；数据时间 '+stamp(q?.ObservedAt)+'；在线成功 '+stamp(q?.LastOfficialSuccessAt)+
     '。日志：'+stateLabel(u,data.UsageValidity)+'；完整统计 '+stamp(u?.LastSuccessAt)+
     '。最近尝试 '+stamp(r?.AttemptedAt)+(r?.IsRefreshing?' · 刷新中':'')+
@@ -99,8 +110,6 @@ function selected() {
 function render() {
   if(!data)return;
   quotas();
-  const activeRanks=usageRanks.map(row=>{const totals=sum((row.Daily||[]).filter(day=>day.DateLabel>=$('from').value&&day.DateLabel<=$('to').value));return {...row,...totals};}).filter(row=>row.TotalTokens>0).sort((a,b)=>b.TotalTokens-a.TotalTokens).slice(0,20);$('session-rankings').innerHTML=activeRanks.length?`<table><thead><tr><th>会话</th><th>项目</th><th>Token</th><th>费用</th></tr></thead><tbody>${activeRanks.map(row=>`<tr><td>${escapeHtml(row.Session)}</td><td>${escapeHtml(row.Project)}</td><td>${exact(row.TotalTokens)}</td><td>${cost(row)}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">此日期范围暂无可排行的本地会话记录。</div>';
-  const forecasts=data.QuotaForecast||[];$('quota-forecast').innerHTML=forecasts.length?forecasts.map(f=>{const w=quotaWindowName(f.WindowKey);if(f.Status==='insufficient')return `<article class="metric"><span>${escapeHtml(w)}</span><strong>样本不足</strong><small>至少需要 5 分钟内的两次观测</small></article>`;if(f.Status==='idle')return `<article class="metric"><span>${escapeHtml(w)}</span><strong>暂无消耗</strong><small>近期速度过低，暂不预测</small></article>`;const when=new Date(f.EstimatedExhaustedAt).toLocaleString('zh-CN');return `<article class="metric"><span>${escapeHtml(w)}</span><strong>${Number(f.UsedPercentPerHour).toFixed(1)}% / 小时</strong><small>预计 ${when} 耗尽 · ${f.Status==='before_reset'?'早于重置':'晚于重置'}</small></article>`;}).join(''):'<div class="history-empty">等待当前周期的有效额度历史。</div>';
   renderQuotaHistory();
   const days=data.Daily || [];
   const day=days.find(row=>row.DateLabel===today());
@@ -196,7 +205,7 @@ function reminderStatus() {
   const s=data?.ReminderStatus, r=preferences?.Reminders;
   const errors={state_read_failed:'提醒状态无法读取，自动提醒已暂停',state_write_failed:'提醒状态无法保存，自动提醒已暂停',state_evaluation_failed:'提醒状态处理失败，自动提醒已暂停',notification_failed:'上次系统通知调用失败，该提醒不会重复发送',settings_read_failed:'提醒设置无法读取，请重新保存设置',settings_write_failed:'提醒设置保存失败，请重新保存设置'};
   let message=!connected?'连接中断，提醒状态暂无法确认':s?.ErrorCode?errors[s.ErrorCode]||'提醒暂不可用':!r?'等待提醒设置':r.Enabled===false?'额度提醒已关闭':r.SnoozeUntilUtcMs>Date.now()?'额度提醒暂停至 '+stamp(r.SnoozeUntilUtcMs):s?.Suppression==='quiet_hours'?'额度提醒处于定时免打扰':'额度提醒已开启，仅依据有效在线新数据';
-  $('reminder-status').textContent=message;
+  $('reminder-status-text').textContent=message;
   const rebuild=connected&&s?.StorageAvailable===false;
   $('reminder-rebuild').hidden=!rebuild;$('reminder-rebuild-help').hidden=!rebuild;
 }
@@ -208,7 +217,7 @@ async function api(path,body) {
 async function load() {
   if(loading)return;loading=true;
   try {
-    const [next,prefs,prices,ranks]=await Promise.all([api('usage'),api('preferences'),api('pricing'),api('rankings')]); const oldToday=data?.LocalDate;data=next;usageRanks=ranks||[];acceptPreferences(prefs);if(document.activeElement!==$('pricing-json'))$('pricing-json').value=Object.keys(prices).length?JSON.stringify(prices,null,2):'';connected=true;
+    const [next,prefs,prices]=await Promise.all([api('usage'),api('preferences'),api('pricing')]); const oldToday=data?.LocalDate;data=next;acceptPreferences(prefs);if(document.activeElement!==$('pricing-json'))$('pricing-json').value=Object.keys(prices).length?JSON.stringify(prices,null,2):'';connected=true;
     const model=$('model').value;
     $('model').innerHTML='<option value="">全部模型</option>'+byModel(data.Daily||[]).map(row=>`<option>${escapeHtml(row.Model)}</option>`).join('');
     if([...$('model').options].some(option=>option.value===model))$('model').value=model;

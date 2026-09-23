@@ -350,16 +350,6 @@ namespace CodexTrayStatus
             lock (usageCache) usageCache.Clear();
         }
 
-        public Task<List<UsageRank>> FetchSessionUsageAsync()
-        {
-            return Task.Run(delegate {
-                List<FileEntry> files = new List<FileEntry>(); CollectJsonlFiles(Path.Combine(_codexHome, "sessions"), files, int.MaxValue, false); CollectJsonlFiles(Path.Combine(_codexHome, "archived_sessions"), files, int.MaxValue, false);
-                List<UsageRank> ranks = new List<UsageRank>(); DateTime first = DateTime.Today.AddDays(-89);
-                foreach (FileEntry file in files) { if (File.GetLastWriteTime(file.Path).Date < first) continue; List<DailyUsage> days = SummarizeDailyJsonl(ReadLinesShared(file.Path)); UsageRank rank = new UsageRank { Session = Path.GetFileNameWithoutExtension(file.Path), Project = "未提供项目元数据" }; foreach (DailyUsage day in days) { if (day.Date < first) continue; rank.Daily.Add(day); AddUsage(rank, day); foreach (ModelUsage model in day.Models) rank.Models.Add(model); } if (rank.TotalTokens > 0) ranks.Add(rank); }
-                ranks.Sort(delegate(UsageRank a, UsageRank b) { return b.TotalTokens.CompareTo(a.TotalTokens); }); return ranks;
-            });
-        }
-
         private static LocalParseResult ParseLocalObservation(IEnumerable<string> lines, long fileModifiedMilliseconds, long nowMilliseconds)
         {
             JavaScriptSerializer serializer = CreateSerializer();

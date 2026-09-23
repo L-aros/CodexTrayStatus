@@ -122,9 +122,7 @@ namespace CodexTrayStatus
                 string error = reminders.Rebuild(); ApplySnapshot(); return error;
             })); };
             statistics.QuotaHistoryRequested = delegate(string range, string account) { return quotaHistory.Query(range, account, DataFreshness.Now); };
-            statistics.QuotaForecastRequested = delegate(AppSnapshot value) { string account = value == null || value.QuotaState == null ? null : value.QuotaState.AccountKey; return QuotaForecastService.Evaluate(quotaHistory.Query("90d", account, DataFreshness.Now), value, DataFreshness.Now); };
             statistics.SavePricing = delegate(System.Collections.Generic.Dictionary<string, ModelPrice> values) { return (string)overlay.Invoke(new Func<string>(delegate { return SavePricingOverrides(values); })); };
-            statistics.UsageRanksRequested = delegate { return quotaService.FetchSessionUsageAsync().GetAwaiter().GetResult(); };
             PublishWebPreferences();
 
             refreshTimer = new System.Windows.Forms.Timer();

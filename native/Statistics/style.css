@@ -12,3 +12,11 @@
 #taskbar-settings .setting-row{gap:12px}
 #taskbar-settings-error{color:#efa35c}
 .quota-history{padding:0 25px 25px;min-height:190px;overflow-x:auto}.quota-history svg{display:block;width:100%;min-width:520px;height:190px}.quota-history .history-empty{padding:48px 18px;color:var(--muted);text-align:center}.quota-history .history-key{font-size:11px;fill:var(--muted)}.quota-history .history-grid{stroke:rgba(139,152,168,.28);stroke-width:1}.quota-history .history-line{fill:none;stroke:#53c97e;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.quota-history .history-dot{fill:#53c97e}.quota-history .history-reset{stroke:#e6ad3e;stroke-dasharray:3 4}
+
+.status-notices{position:fixed;z-index:20;top:96px;right:24px;width:min(520px,calc(100vw - 48px));display:grid;gap:10px;pointer-events:none}
+.status-notices .notice{margin:0;box-shadow:0 12px 30px #0007;pointer-events:auto}
+.dismissible-notice{display:flex;align-items:flex-start;gap:12px}
+.dismissible-notice>span{flex:1;min-width:0}
+.notice-dismiss{flex:none;border:0;background:transparent;color:inherit;padding:0 2px;font-size:22px;line-height:1;opacity:.8}
+.notice-dismiss:hover{background:transparent;opacity:1}
+@media(max-width:720px){.status-notices{top:12px;right:12px;width:calc(100vw - 24px)}}

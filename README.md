@@ -29,11 +29,11 @@
 ~~~powershell
 cosign verify-blob .\CodexTrayStatus-Setup.exe `
   --bundle .\CodexTrayStatus-Setup.exe.sigstore.json `
-  --certificate-identity 'https://github.com/L-aros/CodexTrayStatus/.github/workflows/release.yml@refs/tags/v0.4.1' `
+  --certificate-identity 'https://github.com/L-aros/CodexTrayStatus/.github/workflows/release.yml@refs/tags/v0.4.2' `
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
 ~~~
 
-其他版本请将命令中的 `v0.4.1` 改为对应发布标签。Sigstore 文件签名不是 Windows Authenticode 签名，因此 SmartScreen 仍可能显示“未知发布者”。
+其他版本请将命令中的 `v0.4.2` 改为对应发布标签。Sigstore 文件签名不是 Windows Authenticode 签名，因此 SmartScreen 仍可能显示“未知发布者”。
 
 ## 数据与隐私
 
@@ -62,7 +62,7 @@ cosign verify-blob .\CodexTrayStatus-Setup.exe `
 
 ~~~powershell
 ./scripts/test-native.ps1
-./scripts/build-native.ps1 -Version 0.4.1
+./scripts/build-native.ps1 -Version 0.4.2
 # 未安装 NSIS 时只构建独立程序
 ./scripts/build-native.ps1 -SkipInstaller
 ~~~

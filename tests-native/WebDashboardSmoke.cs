@@ -35,8 +35,6 @@ internal static class WebDashboardSmoke
                 };
             };
             server.SavePricing = delegate(Dictionary<string, ModelPrice> prices) { PricingCatalog.Replace(prices); return null; };
-            server.UsageRanksRequested = delegate { UsageRank rank = new UsageRank { Session = "fixture-session", Project = "未提供项目元数据", TotalTokens = 1000, EstimatedCost = 0.01m }; rank.Daily.Add(new DailyUsage { Date = DateTime.Today, Input = 500, Output = 500, TotalTokens = 1000, EstimatedCost = 0.01m }); return new List<UsageRank> { rank }; };
-            server.QuotaForecastRequested = delegate(AppSnapshot value) { return new List<QuotaForecast> { new QuotaForecast { WindowKey = "fixture-five", UsedPercentPerHour = 12.5, EstimatedExhaustedAt = DateTimeOffset.UtcNow.AddHours(3).ToUnixTimeMilliseconds(), ResetsAt = DateTimeOffset.UtcNow.AddHours(4).ToUnixTimeMilliseconds(), SampleCount = 3, Status = "before_reset" } }; };
             server.PublishReminderStatus(new ReminderStatus { StorageAvailable = true });
             int refreshes = 0;
             server.RefreshRequested = delegate { refreshes++; };
@@ -61,7 +59,6 @@ internal static class WebDashboardSmoke
                 Check(client.DownloadString(server.Url).Contains("settings-form"), "The embedded page must include settings");
                 Check(client.DownloadString(server.Url + "app.js").Contains("CachedInput"), "The script must be served");
                 Check(client.DownloadString(server.Url + "api/usage").Contains("gpt-5.6-sol"), "API must contain model breakdowns");
-                Check(client.DownloadString(server.Url + "api/rankings").Contains("fixture-session"), "Session ranking API exposes aggregates only");
                 client.Headers["Origin"] = new Uri(server.Url).GetLeftPart(UriPartial.Authority);
                 client.Headers["Content-Type"] = "application/json";
                 string priced = client.UploadString(server.Url + "api/pricing", "POST", "{\"fixture-model\":{\"Input\":2,\"Cached\":0.2,\"Output\":4}}");
