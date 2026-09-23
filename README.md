@@ -15,6 +15,10 @@
 - 设置：刷新间隔、剩余/已用口径、开机启动、USD/CNY 币种与参考汇率。设置保存在本机，币种同步到任务栏。
 - 网页仅监听 `127.0.0.1`，使用随机私有路径，页面资源全部内置于 EXE，无 CDN 或 Node.js 运行依赖。关闭浏览器不会退出托盘；退出托盘后网页停止更新。
 
+## 开源协议
+
+本项目采用 [MIT License](LICENSE)。
+
 ## 安装
 
 推荐从 [GitHub Releases](https://github.com/L-aros/CodexTrayStatus/releases) 下载 `CodexTrayStatus-Setup.exe`。本地构建时，安装包位于 `artifacts/installer/CodexTrayStatus-Setup.exe`。
@@ -30,11 +34,11 @@
 ~~~powershell
 cosign verify-blob .\CodexTrayStatus-Setup.exe `
   --bundle .\CodexTrayStatus-Setup.exe.sigstore.json `
-  --certificate-identity 'https://github.com/L-aros/CodexTrayStatus/.github/workflows/release.yml@refs/tags/v0.4.5' `
+  --certificate-identity 'https://github.com/L-aros/CodexTrayStatus/.github/workflows/release.yml@refs/tags/v0.4.6' `
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
 ~~~
 
-其他版本请将命令中的 `v0.4.5` 改为对应发布标签。Sigstore 文件签名不是 Windows Authenticode 签名，因此 SmartScreen 仍可能显示“未知发布者”。
+其他版本请将命令中的 `v0.4.6` 改为对应发布标签。Sigstore 文件签名不是 Windows Authenticode 签名，因此 SmartScreen 仍可能显示“未知发布者”。
 
 ## 数据与隐私
 
@@ -64,7 +68,7 @@ cosign verify-blob .\CodexTrayStatus-Setup.exe `
 
 ~~~powershell
 ./scripts/test-native.ps1
-./scripts/build-native.ps1 -Version 0.4.5
+./scripts/build-native.ps1 -Version 0.4.6
 # 未安装 NSIS 时只构建独立程序
 ./scripts/build-native.ps1 -SkipInstaller
 ~~~

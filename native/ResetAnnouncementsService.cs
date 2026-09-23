@@ -33,7 +33,7 @@ namespace CodexTrayStatus
         {
             HttpClient httpClient = new HttpClient(new HttpClientHandler { UseCookies = false });
             httpClient.Timeout = TimeSpan.FromSeconds(8);
-            httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("CodexTrayStatus/0.4.5");
+            httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("CodexTrayStatus/0.4.6");
             return httpClient;
         }
 
