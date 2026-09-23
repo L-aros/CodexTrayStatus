@@ -16,7 +16,7 @@
 
 ## 安装
 
-推荐直接运行 [CodexTrayStatus-Setup.exe](artifacts/installer/CodexTrayStatus-Setup.exe)。
+推荐从 [GitHub Releases](https://github.com/L-aros/CodexTrayStatus/releases) 下载 `CodexTrayStatus-Setup.exe`。本地构建时，安装包位于 `artifacts/installer/CodexTrayStatus-Setup.exe`。
 
 - 按当前用户安装到 %LOCALAPPDATA%/Programs/CodexTrayStatus
 - 不需要管理员权限
@@ -24,7 +24,16 @@
 - 安装时可选开机启动
 - 需要 Windows 10/11 与 .NET Framework 4.8
 
-安装包目前没有商业代码签名证书，Windows SmartScreen 可能显示“未知发布者”。
+发布包通过 [Sigstore Cosign](https://docs.sigstore.dev/cosign/signing/signing_with_blobs/) 无密钥签名，安装包和独立 EXE 各附带一个 `.sigstore.json` 文件。下载发布页中的安装包及同名签名包后，可验证来源和文件完整性：
+
+~~~powershell
+cosign verify-blob .\CodexTrayStatus-Setup.exe `
+  --bundle .\CodexTrayStatus-Setup.exe.sigstore.json `
+  --certificate-identity 'https://github.com/L-aros/CodexTrayStatus/.github/workflows/release.yml@refs/tags/v0.4.1' `
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
+~~~
+
+其他版本请将命令中的 `v0.4.1` 改为对应发布标签。Sigstore 文件签名不是 Windows Authenticode 签名，因此 SmartScreen 仍可能显示“未知发布者”。
 
 ## 数据与隐私
 
@@ -49,11 +58,11 @@
 
 ## 构建与验证
 
-本机需要 .NET Framework 4.8 开发组件；仓库内保留了一份精简 NSIS 构建工具。
+本机需要 .NET Framework 4.8 开发组件和 NSIS。构建脚本会查找标准安装位置，或 `artifacts/tools/nsis/makensis.exe`。
 
 ~~~powershell
 ./scripts/test-native.ps1
-./scripts/build-native.ps1 -Version 0.4.0
+./scripts/build-native.ps1 -Version 0.4.1
 # 未安装 NSIS 时只构建独立程序
 ./scripts/build-native.ps1 -SkipInstaller
 ~~~

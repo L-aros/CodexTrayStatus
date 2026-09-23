@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = "0.4.0",
+    [string]$Version = "0.4.1",
     [switch]$SkipInstaller,
     [string]$NativeOutputDirectory = "native"
 )
@@ -106,9 +106,19 @@ if ($SkipInstaller) {
     return
 }
 
-$makeNsis = Join-Path $projectRoot ".builder-cache-v2\nsis-3.0.4.1\nsis-3.0.4.1-1mx3n\Bin\makensis.exe"
-if (-not (Test-Path $makeNsis)) {
-    throw "The cached NSIS compiler was not found: $makeNsis"
+$nsisCandidates = @(
+    (Join-Path $projectRoot "artifacts\tools\nsis\makensis.exe"),
+    (Join-Path $projectRoot ".builder-cache-v2\nsis-3.0.4.1\nsis-3.0.4.1-1mx3n\Bin\makensis.exe"),
+    "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+    "$env:ProgramFiles\NSIS\makensis.exe"
+)
+$makeNsis = $nsisCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not $makeNsis) {
+    $nsisCommand = Get-Command makensis.exe -ErrorAction SilentlyContinue
+    if ($nsisCommand) { $makeNsis = $nsisCommand.Source }
+}
+if (-not $makeNsis) {
+    throw "NSIS makensis.exe was not found. Install NSIS or place it under artifacts/tools/nsis."
 }
 if (-not (Test-Path $installerScript)) {
     throw "The NSIS installer script was not found: $installerScript"

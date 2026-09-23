@@ -1,0 +1,51 @@
+name: Release Windows installer
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis --yes --no-progress
+      - name: Build application and installer
+        shell: pwsh
+        run: ./scripts/build-native.ps1 -Version ($env:GITHUB_REF_NAME.TrimStart('v'))
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.1.2
+        with:
+          cosign-release: v3.1.3
+      - name: Sign and verify release assets with Sigstore
+        shell: pwsh
+        run: |
+          $identity = "https://github.com/$env:GITHUB_REPOSITORY/.github/workflows/release.yml@refs/tags/$env:GITHUB_REF_NAME"
+          $assets = @(
+            'artifacts/installer/CodexTrayStatus-Setup.exe',
+            'artifacts/native/CodexTrayStatus.exe'
+          )
+          foreach ($asset in $assets) {
+            $bundle = "$asset.sigstore.json"
+            cosign sign-blob --yes --bundle $bundle $asset
+            if ($LASTEXITCODE -ne 0) { throw "Signing failed: $asset" }
+            cosign verify-blob $asset --bundle $bundle --certificate-identity $identity --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
+            if ($LASTEXITCODE -ne 0) { throw "Verification failed: $asset" }
+          }
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME --verify-tag --title $env:GITHUB_REF_NAME --generate-notes `
+            artifacts/installer/CodexTrayStatus-Setup.exe `
+            artifacts/installer/CodexTrayStatus-Setup.exe.sigstore.json `
+            artifacts/native/CodexTrayStatus.exe `
+            artifacts/native/CodexTrayStatus.exe.sigstore.json
