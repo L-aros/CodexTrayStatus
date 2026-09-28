@@ -21,7 +21,6 @@ namespace CodexTrayStatus
         private bool started;
         private bool timerDisposed;
         private WebPreferences preferences = new WebPreferences { ShowRemaining = true, Currency = "USD", ExchangeRate = 7m };
-        private int missingLayoutSamples;
         private string lastVisualKey;
         private IntPtr lastTaskbarWindow;
 
@@ -62,8 +61,7 @@ namespace CodexTrayStatus
             started = true;
             IntPtr ignored = Handle; // Create the native window without displaying a blank first frame.
             SafeRender(true);
-            maintainTimer.Start();
-            zOrderTimer.Start();
+            UpdateTimers();
         }
 
         internal void ApplySnapshot(AppSnapshot value)
@@ -75,7 +73,16 @@ namespace CodexTrayStatus
         internal void ApplyPreferences(WebPreferences value)
         {
             preferences = value;
+            UpdateTimers();
             SafeRender(false);
+        }
+
+        private bool ExtendedDisplay { get { return preferences != null && preferences.TaskbarDisplay != null && preferences.TaskbarDisplay.DisplayMode == "overlay"; } }
+
+        private void UpdateTimers()
+        {
+            if (timerDisposed) return;
+            maintainTimer.Enabled = zOrderTimer.Enabled = started && ExtendedDisplay;
         }
 
         internal bool TryGetAnchorBounds(out Rectangle bounds)
@@ -140,14 +147,24 @@ namespace CodexTrayStatus
             if (message.Msg == 0x02E0) SafeRender(true); // WM_DPICHANGED
         }
 
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            nativeVisible = false;
+            bitmapReady = false;
+            lastNativeBounds = Rectangle.Empty;
+            lastTaskbarWindow = IntPtr.Zero;
+            base.OnHandleDestroyed(e);
+        }
+
         private void SafeRender(bool forceRender)
         {
             try { RenderAndPosition(forceRender); }
             catch
             {
-                // Preserve the last successfully composed frame. A transient Explorer or
-                // GDI failure should not turn a harmless retry into a visible blank flash.
+                // An old frame may now cover a different shell surface. Retry composition
+                // on the next pass, but never preserve an unverified screen position.
                 bitmapReady = false;
+                HideNative();
             }
         }
 
@@ -157,7 +174,14 @@ namespace CodexTrayStatus
                 lastNativeBounds.IsEmpty) return;
             try
             {
-                if (NativeMethods.IsForegroundFullScreen(lastTaskbarWindow, Handle))
+                Rectangle taskbar;
+                Rectangle notification;
+                IntPtr taskbarWindow;
+                bool found = NativeMethods.TryGetTaskbarLayout(out taskbar, out notification, out taskbarWindow);
+                if (!TaskbarSurface.Matches(found, taskbarWindow, taskbar, notification,
+                    lastTaskbarWindow, lastTaskbar, lastNotification) ||
+                    NativeMethods.IsTaskbarAutoHidden(taskbar, taskbarWindow) ||
+                    NativeMethods.IsForegroundFullScreen(taskbarWindow, Handle))
                 {
                     HideNative();
                     return;
@@ -173,25 +197,22 @@ namespace CodexTrayStatus
             }
             catch
             {
-                // The slower layout maintenance pass will recover from shell replacement.
+                HideNative(); // The slower pass revalidates and recovers the shell surface.
             }
         }
 
         private void RenderAndPosition(bool forceRender)
         {
             if (IsDisposed || !IsHandleCreated) return;
+            if (!ExtendedDisplay) { HideNative(); return; }
             Rectangle taskbar;
             Rectangle notification;
             IntPtr taskbarWindow;
             if (!NativeMethods.TryGetTaskbarLayout(out taskbar, out notification, out taskbarWindow))
             {
-                // Explorer can briefly rebuild TrayNotifyWnd. Require consecutive misses
-                // before hiding so a one-sample gap never flashes the overlay off and on.
-                missingLayoutSamples++;
-                if (missingLayoutSamples >= 3) HideNative();
+                HideNative();
                 return;
             }
-            missingLayoutSamples = 0;
             if (NativeMethods.IsTaskbarAutoHidden(taskbar, taskbarWindow) ||
                 NativeMethods.IsForegroundFullScreen(taskbarWindow, Handle))
             {
@@ -219,7 +240,7 @@ namespace CodexTrayStatus
                 Rectangle target = new Rectangle(notification.Left - layout.Width - 4, taskbar.Top, layout.Width, taskbar.Height);
                 using (Bitmap bitmap = layout.Draw(view.Accent))
                 {
-                    if (!NativeMethods.ApplyLayeredBitmap(Handle, bitmap, target.Location)) { bitmapReady = false; return; }
+                    if (!NativeMethods.ApplyLayeredBitmap(Handle, bitmap, target.Location)) { bitmapReady = false; HideNative(); return; }
                 }
                 lastNativeBounds = target;
                 bitmapReady = true;
@@ -242,11 +263,24 @@ namespace CodexTrayStatus
 
         private void HideNative()
         {
+            if (IsDisposed || !IsHandleCreated) { nativeVisible = false; return; }
             if (!nativeVisible && !NativeMethods.IsWindowShown(Handle)) return;
             nativeVisible = false;
             if (!IsDisposed && IsHandleCreated) NativeMethods.HideWindow(Handle);
         }
 
         internal static string FormatTokens(long value) { return TaskbarPresenter.Tokens(value); }
+    }
+
+    // Pure shell identity/geometry gate, shared by runtime maintenance and regression tests.
+    internal static class TaskbarSurface
+    {
+        internal static bool Matches(bool found, IntPtr window, Rectangle bar, Rectangle tray,
+            IntPtr previousWindow, Rectangle previousBar, Rectangle previousTray)
+        {
+            return found && window != IntPtr.Zero && window == previousWindow &&
+                bar.Width > bar.Height && bar.Height > 0 && tray.Width > 0 && tray.Height > 0 &&
+                bar.Contains(tray) && bar == previousBar && tray == previousTray;
+        }
     }
 }

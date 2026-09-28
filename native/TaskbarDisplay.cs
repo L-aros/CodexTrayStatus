@@ -8,6 +8,7 @@ namespace CodexTrayStatus
     public sealed class TaskbarDisplayPreferences
     {
         public int? Version { get; set; }
+        public string DisplayMode { get; set; }
         public string SelectionMode { get; set; }
         public string SelectedWindowKey { get; set; }
         public bool? ShowCost { get; set; }
@@ -18,12 +19,15 @@ namespace CodexTrayStatus
             current = current ?? new TaskbarDisplayPreferences(); patch = patch ?? new TaskbarDisplayPreferences();
             TaskbarDisplayPreferences value = new TaskbarDisplayPreferences {
                 Version = patch.Version ?? current.Version ?? 1,
+                // Windows may move notification icons into the hidden overflow and
+                // provides no supported force-pin API. Default to the visible layer.
+                DisplayMode = patch.DisplayMode ?? current.DisplayMode ?? "overlay",
                 SelectionMode = patch.SelectionMode ?? current.SelectionMode ?? "default",
                 SelectedWindowKey = patch.SelectedWindowKey ?? current.SelectedWindowKey ?? "",
                 ShowCost = patch.ShowCost ?? current.ShowCost ?? true,
                 ShowCountdown = patch.ShowCountdown ?? current.ShowCountdown ?? true
             };
-            if (value.Version != 1 || (value.SelectionMode != "default" && value.SelectionMode != "selected" && value.SelectionMode != "minimum") ||
+            if (value.Version != 1 || (value.DisplayMode != "tray" && value.DisplayMode != "overlay") || (value.SelectionMode != "default" && value.SelectionMode != "selected" && value.SelectionMode != "minimum") ||
                 value.SelectedWindowKey.Length > 512 || (value.SelectionMode == "selected" && string.IsNullOrWhiteSpace(value.SelectedWindowKey)))
                 throw new InvalidOperationException("任务栏设置无效：请选择额度窗口并检查设置版本");
             foreach (char c in value.SelectedWindowKey) if (char.IsControl(c)) throw new InvalidOperationException("额度窗口标识无效");
@@ -78,7 +82,7 @@ namespace CodexTrayStatus
                 {
                     if (field.Value == null) continue;
                     bool valid = (field.Key == "ShowCost" || field.Key == "ShowCountdown") ? field.Value is bool :
-                        field.Key == "Version" ? field.Value is int : (field.Key == "SelectionMode" || field.Key == "SelectedWindowKey") ? field.Value is string : true;
+                        field.Key == "Version" ? field.Value is int : (field.Key == "DisplayMode" || field.Key == "SelectionMode" || field.Key == "SelectedWindowKey") ? field.Value is string : true;
                     if (!valid) throw new InvalidOperationException("任务栏设置类型无效");
                 }
             }
@@ -126,7 +130,7 @@ namespace CodexTrayStatus
     {
         internal static string VisualKey(TaskbarPresentation view)
         {
-            return view.Prefix + "\u001f" + view.Percent + "\u001f" + view.Secondary + "\u001f" + view.Accent + "\u001f" + view.Status;
+            return view.Prefix + "\u001f" + view.CompactPrefix + "\u001f" + view.Percent + "\u001f" + view.Secondary + "\u001f" + view.CompactSecondary + "\u001f" + view.Accent + "\u001f" + view.Status;
         }
         internal static bool ValidPercent(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) && value >= 0 && value <= 100; }
         internal static bool ValidPair(RateLimitWindow w) { return w != null && ValidPercent(w.UsedPercent) && ValidPercent(w.RemainingPercent) && Math.Abs(w.UsedPercent.Value + w.RemainingPercent.Value - 100) < 0.001; }
@@ -215,6 +219,7 @@ namespace CodexTrayStatus
             }
             return result;
         }
+
         private static string Clean(string text)
         {
             System.Text.StringBuilder result = new System.Text.StringBuilder();

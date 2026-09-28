@@ -1,6 +1,6 @@
 # Codex Tray Status
 
-一个轻量的 Windows Codex 用量监控工具。它把两行状态直接放在系统通知区左侧，无需悬停：
+一个轻量的 Windows Codex 用量监控工具。默认用任务栏文字层直接显示额度，并同时提供通知区数字图标，无需悬停：
 
 ~~~text
 5D · 剩余 94%
@@ -8,6 +8,8 @@
 ~~~
 
 点击状态文字直接打开本地网页，**概览、统计、设置全部在浏览器中使用**，不再弹出原生详情小窗口。右键托盘菜单可直达各页面。
+
+数字图标遵循“剩余 / 已用”和额度窗口选择；`?` 表示没有可信的新额度，旧值或本地参考仍可在页面查看。Windows 可能把通知图标收进溢出区，应用没有受支持的强制固定接口，因此默认同时显示文字层。拥挤任务栏、第三方 Shell 或发生重叠时，可切换为“仅通知区数字”，再从溢出区手动拖到任务栏。
 
 - 概览：额度、重置时间、今日 Token、费用分项与七天趋势。
 - 公开重置公告：显示最近一次公开重置、明确排期的公告和近期记录；数据来自 [Codex Resets](https://codex-resets.com)，与个人账号额度分开展示。
@@ -83,6 +85,8 @@ artifacts/installer/CodexTrayStatus-Setup.exe
 ## 当前边界与 macOS 计划
 
 第一阶段优先支持带通知区的 Windows 主横向任务栏；自动隐藏时状态层会随任务栏一起隐藏。竖向任务栏和副屏独立任务栏后续再做专门布局。
+
+通知区数字走 WinForms `NotifyIcon`，由 Windows 处理任务栏布局与 Explorer 重建；文字层负责启动即见。实现依据 [Microsoft 通知区文档](https://learn.microsoft.com/en-us/windows/win32/shell/notification-area)，并参考 [TrafficMonitor 的重叠问题说明](https://github.com/zhongyang219/TrafficMonitor/blob/master/Help_en-us.md)，不注入 Explorer、不修改其内部窗口尺寸。离屏布局测试不能证明所有 Windows 版本及第三方 Shell 兼容。
 
 macOS 不会捆绑 Windows/.NET 版本。计划用 Swift/AppKit 做原生菜单栏 companion，并复用相同的数据口径与面板信息结构，以保持小体积和低常驻开销。
 

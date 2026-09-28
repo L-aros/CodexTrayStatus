@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
@@ -35,7 +35,7 @@ namespace CodexTrayStatus
         private bool changingAutoStart;
         private int refreshing;
         private int exiting;
-        private int statusIconKey;
+        private string statusIconKey;
         private bool statusIconKeyReady;
 
         internal TrayApplicationContext()
@@ -99,8 +99,8 @@ namespace CodexTrayStatus
             notifyIcon = new NotifyIcon();
             notifyIcon.Text = "Codex Tray Status";
             notifyIcon.ContextMenuStrip = contextMenu;
-            notifyIcon.Icon = CreateStatusIcon(null);
-            statusIconKey = GetStatusIconKey(null);
+            notifyIcon.Icon = TrayNumberIcon.Create(null, SystemInformation.SmallIconSize.Width, SystemInformation.HighContrast);
+            statusIconKey = TrayNumberIcon.Key(null, SystemInformation.SmallIconSize.Width, SystemInformation.HighContrast);
             statusIconKeyReady = true;
             notifyIcon.Visible = true;
             reminders = new ReminderCoordinator(new ReminderStateStore(System.IO.Path.Combine(
@@ -207,8 +207,6 @@ namespace CodexTrayStatus
             statistics.PublishReminderStatus(reminderStatus);
             statistics.Publish(snapshot);
 
-            RateLimitWindow primary = FindPrimaryWindow();
-            RateLimitWindow iconWindow = primary != null && TaskbarPresenter.ValidPair(primary) && DataFreshness.EvaluateQuota(primary, snapshot.QuotaState, DataFreshness.Now).IsFresh ? primary : null;
             TaskbarPresentation view = TaskbarPresenter.Build(snapshot, CurrentWebPreferences(), DataFreshness.Now);
             string nextQuotaText = view.Prefix + view.Percent + " · " + view.Detail;
             if (!string.Equals(quotaLine.Text, nextQuotaText, StringComparison.Ordinal)) quotaLine.Text = nextQuotaText;
@@ -219,11 +217,13 @@ namespace CodexTrayStatus
             if (!string.Equals(usageLine.Text, nextUsageText, StringComparison.Ordinal))
                 usageLine.Text = nextUsageText;
 
-            int nextIconKey = GetStatusIconKey(iconWindow);
+            int iconSize = SystemInformation.SmallIconSize.Width;
+            bool highContrast = SystemInformation.HighContrast;
+            string nextIconKey = TrayNumberIcon.Key(view, iconSize, highContrast);
             if (!statusIconKeyReady || nextIconKey != statusIconKey)
             {
                 Icon oldIcon = notifyIcon.Icon;
-                notifyIcon.Icon = CreateStatusIcon(iconWindow);
+                notifyIcon.Icon = TrayNumberIcon.Create(view, iconSize, highContrast);
                 statusIconKey = nextIconKey;
                 statusIconKeyReady = true;
                 if (oldIcon != null) oldIcon.Dispose();
@@ -234,27 +234,12 @@ namespace CodexTrayStatus
                 notifyIcon.Text = nextTooltip;
         }
 
-        private RateLimitWindow FindPrimaryWindow()
-        {
-            return TaskbarPresenter.Select(snapshot, taskbarSettings.Current, DataFreshness.Now);
-        }
-
         private string BuildTooltip()
         {
-            string text = "Codex Tray Status";
-            if (snapshot != null) text += "\n" + DataFreshness.Describe(snapshot.QuotaState, DataFreshness.EvaluateQuota(FindPrimaryWindow(), snapshot.QuotaState, DataFreshness.Now));
-            if (snapshot != null && snapshot.Quota != null && snapshot.Quota.Limits != null)
-                foreach (RateLimitWindow item in snapshot.Quota.Limits)
-                    if (item != null)
-                    {
-                        double? metric = showRemaining ? item.RemainingPercent : item.UsedPercent;
-                        if (metric.HasValue)
-                            text += "\n" + item.Label + (showRemaining ? " 剩余 " : " 已用 ") +
-                                Math.Round(metric.Value).ToString("0", CultureInfo.InvariantCulture) + "%";
-                    }
+            TaskbarPresentation view = TaskbarPresenter.Build(snapshot, CurrentWebPreferences(), DataFreshness.Now);
+            string text = view.Prefix + view.Percent + "\n" + view.Detail;
             return text.Length > 63 ? text.Substring(0, 63) : text;
         }
-
         private void ToggleDashboard()
         {
             if (Interlocked.CompareExchange(ref exiting, 0, 0) != 0) return;
@@ -268,41 +253,6 @@ namespace CodexTrayStatus
             if (Interlocked.CompareExchange(ref exiting, 0, 0) != 0) return;
             try { statistics.Publish(snapshot); PublishWebPreferences(); statistics.Open(page == DashboardPage.Details ? "overview" : page == DashboardPage.Statistics ? "statistics" : "settings"); }
             catch (Exception error) { MessageBox.Show(error.Message, "无法打开本地网页", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
-        }
-
-        private static Icon CreateStatusIcon(RateLimitWindow window)
-        {
-            int remaining = GetStatusIconKey(window);
-            Color accent = remaining < 0 ? Color.FromArgb(110, 120, 134)
-                : remaining <= 15 ? Color.FromArgb(239, 92, 92)
-                : remaining <= 40 ? Color.FromArgb(230, 173, 62)
-                : Color.FromArgb(83, 201, 126);
-            using (Bitmap bitmap = new Bitmap(32, 32))
-            using (Graphics graphics = Graphics.FromImage(bitmap))
-            {
-                graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                graphics.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                graphics.Clear(Color.Transparent);
-                using (Brush background = new SolidBrush(Color.FromArgb(28, 31, 38)))
-                    graphics.FillEllipse(background, 2, 2, 28, 28);
-                using (Pen ring = new Pen(accent, 3)) graphics.DrawEllipse(ring, 3, 3, 26, 26);
-                string text = remaining < 0 ? "–" : remaining.ToString(CultureInfo.InvariantCulture);
-                using (Font font = Typography.Display(text.Length >= 3 ? 9 : 11, FontStyle.Regular, GraphicsUnit.Pixel))
-                using (Brush brush = new SolidBrush(Color.White))
-                {
-                    SizeF size = graphics.MeasureString(text, font);
-                    graphics.DrawString(text, font, brush, (32 - size.Width) / 2f, (32 - size.Height) / 2f);
-                }
-                IntPtr handle = bitmap.GetHicon();
-                try { return (Icon)Icon.FromHandle(handle).Clone(); }
-                finally { NativeMethods.DestroyIcon(handle); }
-            }
-        }
-
-        private static int GetStatusIconKey(RateLimitWindow window)
-        {
-            return window == null || !window.RemainingPercent.HasValue
-                ? -1 : (int)Math.Round(window.RemainingPercent.Value);
         }
 
         private string ApplyWebPreferences(WebPreferences preferences)
@@ -398,7 +348,7 @@ namespace CodexTrayStatus
                 using (RegistryKey key = Registry.CurrentUser.CreateSubKey(PreferencesRegistryPath))
                     key.SetValue("PricingOverridesV1", new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(PricingCatalog.Snapshot()));
                 quotaService.InvalidateUsageCache();
-                RefreshAsync(true); // Re-scan prices; token quantities remain derived from logs.
+                overlay.BeginInvoke(new Action(async delegate { await RefreshAsync(true); })); // Re-scan prices; token quantities remain derived from logs.
                 return null;
             }
             catch (Exception error) { return error.Message; }

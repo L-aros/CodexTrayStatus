@@ -125,5 +125,7 @@ if ($nodeCommand) {
     if ($LASTEXITCODE -ne 0) { throw 'Web freshness display tests failed.' }
     & $nodeCommand.Source (Join-Path $projectRoot 'tests-native\WebResetAnnouncementsSmoke.js')
     if ($LASTEXITCODE -ne 0) { throw 'Public reset display tests failed.' }
+    & $nodeCommand.Source (Join-Path $projectRoot 'tests-native\WebTaskbarSmoke.js')
+    if ($LASTEXITCODE -ne 0) { throw 'Web taskbar display tests failed.' }
 }
 else { Write-Host 'Node is unavailable; optional web display tests skipped.' }

@@ -176,6 +176,7 @@ function fillSettings() {
   $('reminder-end').value=minutesToTime(r.QuietEndMinutes ?? 480);
   $('reminder-snooze').value='keep';
   const t=preferences.TaskbarDisplay || {SelectionMode:'default',SelectedWindowKey:'',ShowCost:true,ShowCountdown:true};
+  $('taskbar-display-mode').value=t.DisplayMode || 'overlay';
   $('taskbar-mode').value=t.SelectionMode;$('taskbar-cost').checked=t.ShowCost;$('taskbar-countdown').checked=t.ShowCountdown;
   fillTaskbarWindows(t.SelectedWindowKey);
   formBaseline=JSON.parse(JSON.stringify(preferences));
@@ -192,7 +193,7 @@ function fillTaskbarWindows(key=$('taskbar-window').value) {
   $('taskbar-window').disabled=$('taskbar-mode').value!=='selected';
 }
 function readTaskbarSettings() {
-  return {SelectionMode:$('taskbar-mode').value,SelectedWindowKey:$('taskbar-window').value,ShowCost:$('taskbar-cost').checked,ShowCountdown:$('taskbar-countdown').checked};
+  return {DisplayMode:$('taskbar-display-mode').value,SelectionMode:$('taskbar-mode').value,SelectedWindowKey:$('taskbar-window').value,ShowCost:$('taskbar-cost').checked,ShowCountdown:$('taskbar-countdown').checked};
 }
 function formPatch() {
   const all={RefreshInterval:Number($('interval').value),ShowRemaining:$('remaining').value==='true',AutoStart:$('autostart').checked,Currency:$('settings-currency').value,ExchangeRate:Number($('exchange').value)};
@@ -217,7 +218,9 @@ async function taskbarPreview() {
     $('taskbar-preview-prefix').textContent=view.Prefix;$('taskbar-preview-percent').textContent=view.Percent;
     $('taskbar-preview-secondary').textContent=view.Secondary;
     $('taskbar-preview-percent').style.color={red:'#ef5c5c',amber:'#e6ad3e',green:'#53c97e',neutral:'#96a0ae'}[view.Accent];
-    $('taskbar-preview-status').textContent=(settingsDirty?'未保存预览':'已应用')+' · '+view.Detail+' · 文字预览，实际布局随任务栏空间调整';
+    const tray=$('taskbar-display-mode').value==='tray';
+    if(tray){$('taskbar-preview-prefix').textContent='通知区数字 · ';$('taskbar-preview-percent').textContent=view.Status==='fresh'?view.Percent.replace('%',''):'?';$('taskbar-preview-secondary').textContent='单位 % · '+($('remaining').value==='true'?'剩余':'已用');}
+    $('taskbar-preview-status').textContent=(settingsDirty?'未保存预览':'已应用')+' · '+view.Detail+(tray?' · 图标由 Windows 排列；隐藏时请从溢出区拖到任务栏':' · 扩展文字层可能与任务栏按钮重叠，遇到问题请切换通知区数字');
   } catch(error) {if(sequence===previewSequence)$('taskbar-preview-status').textContent='预览暂不可用：'+error.message;}
 }
 const reminderChecks={'reminder-enabled':'Enabled','reminder-20':'Threshold20','reminder-10':'Threshold10','reminder-0':'Threshold0','reminder-recovery':'RecoveryEnabled','reminder-quiet':'QuietHoursEnabled'};

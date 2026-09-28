@@ -157,8 +157,7 @@ namespace CodexTrayStatus
             // is safer to leave untouched than to cover a large portion of the desktop.
             if (taskbar.Width <= taskbar.Height || taskbar.Width <= 0 || taskbar.Height <= 0 || notification.Width <= 0)
                 return false;
-            if (notification.Left < taskbar.Left || notification.Right > taskbar.Right ||
-                notification.Bottom <= taskbar.Top || notification.Top >= taskbar.Bottom)
+            if (notification.Height <= 0 || !taskbar.Contains(notification))
                 return false;
             return true;
         }

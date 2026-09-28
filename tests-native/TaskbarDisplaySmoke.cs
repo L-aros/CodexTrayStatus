@@ -7,6 +7,8 @@ namespace CodexTrayStatus
 {
     internal static class TaskbarDisplaySmoke
     {
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern uint GetGuiResources(IntPtr process, uint flags);
         private static int checks;
         private static void Check(bool condition, string message) { checks++; if (!condition) throw new Exception(message); }
         private static void Reject(Action action, string message) { bool rejected = false; try { action(); } catch { rejected = true; } Check(rejected, message); }
@@ -20,6 +22,16 @@ namespace CodexTrayStatus
         }
         private static int Run(string[] args)
         {
+            Rectangle bar = new Rectangle(-1920, 1040, 1920, 40);
+            Rectangle tray = new Rectangle(-200, 1040, 200, 40);
+            IntPtr shell = new IntPtr(42);
+            Check(TaskbarSurface.Matches(true, shell, bar, tray, shell, bar, tray), "Stable negative-coordinate monitor is valid");
+            Check(!TaskbarSurface.Matches(false, shell, bar, tray, shell, bar, tray), "Missing shell cannot resurrect overlay");
+            Check(!TaskbarSurface.Matches(true, IntPtr.Zero, bar, tray, IntPtr.Zero, bar, tray), "Zero shell handle rejected");
+            Check(!TaskbarSurface.Matches(true, new IntPtr(43), bar, tray, shell, bar, tray), "Explorer replacement invalidates frame");
+            Check(!TaskbarSurface.Matches(true, shell, new Rectangle(-1920, 1078, 1920, 40), tray, shell, bar, tray), "Auto-hide animation invalidates frame");
+            Check(!TaskbarSurface.Matches(true, shell, bar, new Rectangle(-300, 1040, 300, 40), shell, bar, tray), "Notification expansion invalidates frame");
+            Check(!TaskbarSurface.Matches(true, shell, Rectangle.Empty, Rectangle.Empty, shell, Rectangle.Empty, Rectangle.Empty), "Empty geometry rejected");
             long now = DateTimeOffset.Now.ToUnixTimeMilliseconds();
             string date = DateTime.Today.ToString("yyyy-MM-dd");
             AppSnapshot snapshot = new AppSnapshot {
@@ -29,7 +41,30 @@ namespace CodexTrayStatus
                 Quota = new QuotaResult { Limits = new List<RateLimitWindow> { Window("week", "7d", 8.1, now), Window("five", "5h", 72, now), null } }
             };
             WebPreferences prefs = Preferences();
+            using (TaskbarOverlay surface = new TaskbarOverlay())
+            {
+                surface.ApplyPreferences(prefs);
+                surface.Start();
+                surface.ApplySnapshot(snapshot);
+                Check(surface.IsHandleCreated, "Default visible mode creates the overlay handle");
+                surface.Stop();
+                surface.Stop();
+                Check(surface.IsDisposed, "Repeated stop does not recreate a destroyed window handle");
+            }
+            Check(prefs.TaskbarDisplay.DisplayMode == "overlay", "Default mode remains visible when Windows hides notification icons");
+            Check(TaskbarDisplayPreferences.Load("{\"Version\":1,\"ShowCost\":false}").DisplayMode == "overlay", "Legacy settings migrate to visible mode");
+            TaskbarDisplayPreferences extended = TaskbarDisplayPreferences.Merge(prefs.TaskbarDisplay, new TaskbarDisplayPreferences { DisplayMode = "overlay" });
+            Check(TaskbarDisplayPreferences.Merge(extended, new TaskbarDisplayPreferences { ShowCost = false }).DisplayMode == "overlay", "Partial settings preserve display mode");
+            Reject(() => TaskbarDisplayPreferences.Merge(null, new TaskbarDisplayPreferences { DisplayMode = "invalid" }), "Unknown display mode rejected");
+            Reject(() => WebPreferencePatch.Parse("{\"TaskbarDisplay\":{\"DisplayMode\":true}}"), "Display mode must be a string");
             TaskbarPresentation view = TaskbarPresenter.Build(snapshot, prefs, now);
+            string initialKey = TaskbarPresenter.VisualKey(view);
+            view.CompactSecondary += "changed";
+            Check(TaskbarPresenter.VisualKey(view) != initialKey, "Compact detail participates in bitmap cache key");
+            view = TaskbarPresenter.Build(snapshot, prefs, now);
+            view.CompactPrefix += "changed";
+            Check(TaskbarPresenter.VisualKey(view) != initialKey, "Compact prefix participates in bitmap cache key");
+            view = TaskbarPresenter.Build(snapshot, prefs, now);
             Check(view.WindowKey == "five" && view.Prefix == "2H · 剩余 " && view.Percent == "72%" && view.Secondary == "今日 12.3K · $1.25", "Default layout text must remain compatible");
             Check(TaskbarPresenter.VisualKey(TaskbarPresenter.Build(snapshot, prefs, now + 1500)) == TaskbarPresenter.VisualKey(TaskbarPresenter.Build(snapshot, prefs, now + 3000)), "Stable formatted countdown must not change the bitmap key");
             Check(TaskbarPresenter.VisualKey(view) != TaskbarPresenter.VisualKey(TaskbarPresenter.Build(snapshot, prefs, now + 1500)), "Crossing an hour changes the bitmap key");
@@ -96,6 +131,37 @@ namespace CodexTrayStatus
             Reject(() => WebPreferencePatch.Parse("{\"TaskbarDisplay\":{\"ShowCost\":\"false\"}}"), "Boolean strings rejected");
 
             string directory = args[0]; Directory.CreateDirectory(directory);
+            foreach (int iconSize in new[] { 16, 20, 24, 32, 40, 48, 64 })
+            foreach (string percentage in new[] { "0%", "8%", "42%", "99%", "100%" })
+            foreach (bool contrast in new[] { false, true })
+            {
+                TaskbarPresentation iconView = new TaskbarPresentation { Status = "fresh", Percent = percentage, Accent = "green" };
+                Check(TrayNumberIcon.Text(iconView) == percentage.TrimEnd('%'), "Fresh icon uses presenter's selected metric");
+                using (Bitmap rendered = TrayNumberIcon.Draw(iconView, iconSize, contrast))
+                {
+                    Check(rendered.Width == iconSize && rendered.Height == iconSize, "Icon rendered at requested DPI size");
+                    rendered.Save(Path.Combine(directory, "tray-" + iconSize + "-" + percentage.TrimEnd('%') + "-" + contrast + ".png"));
+                }
+                using (Icon icon = TrayNumberIcon.Create(iconView, iconSize, contrast)) Check(icon.Handle != IntPtr.Zero, "Owned icon survives temporary bitmap disposal");
+            }
+            foreach (string status in new[] { "stale", "reference", "unknown", "missing" })
+                Check(TrayNumberIcon.Text(new TaskbarPresentation { Status = status, Percent = "72%" }) == "?", "Unqualified icon must not present stale/reference as fresh");
+            Check(TrayNumberIcon.Text(new TaskbarPresentation { Status = "fresh", Percent = "NaN%" }) == "?", "Invalid icon metric rejected");
+            Check(TrayNumberIcon.Text(new TaskbarPresentation { Status = "fresh", Percent = "101%" }) == "?", "Out of range icon metric rejected");
+            Check(TrayNumberIcon.Text(new TaskbarPresentation { Status = "fresh", Percent = "28%" }) == "28", "Used mode is not silently replaced with remaining mode");
+            using (System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess())
+            {
+                uint gdiBefore = GetGuiResources(process.Handle, 0), userBefore = GetGuiResources(process.Handle, 1);
+                for (int i = 0; i < 200; i++)
+                {
+                    using (Icon icon = TrayNumberIcon.Create(new TaskbarPresentation { Status = "fresh", Percent = (i % 101) + "%", Accent = "green" }, i % 2 == 0 ? 16 : 32, false))
+                        Check(icon.Handle != IntPtr.Zero, "Repeated icon updates own a valid handle");
+                }
+                uint gdiAfter = GetGuiResources(process.Handle, 0), userAfter = GetGuiResources(process.Handle, 1);
+                Check(gdiBefore > 0 && userBefore > 0, "GUI resource counters available");
+                Check(gdiAfter <= gdiBefore + 4 && userAfter <= userBefore + 4, "Repeated updates release bitmap, DC and HICON resources");
+                Console.WriteLine("Icon resource stress: GDI " + gdiBefore + " -> " + gdiAfter + "; USER " + userBefore + " -> " + userAfter + ".");
+            }
             int images = 0;
             foreach (int height in new[] { 24, 32, 40, 48, 60, 72, 84, 96, 120 })
             foreach (int width in new[] { 8, 25, 48, 80, 120, 240, 800 })
