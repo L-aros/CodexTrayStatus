@@ -15,6 +15,24 @@ document.querySelectorAll('[data-dismiss]').forEach(button=>button.addEventListe
   $(id).hidden=true;
   try { sessionStorage.setItem('dismissed-'+id,'1'); } catch (_) {}
 }));
+const lastNoticeText=new Map(), noticeTimers=new Map();
+function updateNotice(id, text) {
+  if(dismissedNotices.has(id)) return;
+  if(lastNoticeText.get(id)===text) return;
+  lastNoticeText.set(id,text);
+  $(id+'-text').textContent=text;
+  const el=$(id);
+  el.hidden=false;
+  if(el.classList) el.classList.remove('fading');
+  const timer=noticeTimers.get(id);
+  if(timer) clearTimeout(timer);
+  if(typeof setTimeout==='function') {
+    noticeTimers.set(id, setTimeout(()=>{
+      if(el.classList) el.classList.add('fading');
+      setTimeout(()=>{ el.hidden=true; }, 320);
+    }, 5000));
+  }
+}
 function acceptPreferences(next) {
   if(!preferences || (next.Revision || 0) >= (preferences.Revision || 0)) preferences=next;
 }
@@ -29,11 +47,11 @@ function stateLabel(state, validity) {
 function freshness() {
   if(!data)return;
   const q=data.QuotaState,u=data.UsageState,r=data.RefreshState;
-  $('freshness-text').textContent=(connected?'':'托盘连接中断 · ')+
+  updateNotice('freshness',(connected?'':'托盘连接中断 · ')+
     '额度：'+stateLabel(q,data.QuotaValidity?.[0])+'；数据时间 '+stamp(q?.ObservedAt)+'；在线成功 '+stamp(q?.LastOfficialSuccessAt)+
     '。日志：'+stateLabel(u,data.UsageValidity)+'；完整统计 '+stamp(u?.LastSuccessAt)+
     '。最近尝试 '+stamp(r?.AttemptedAt)+(r?.IsRefreshing?' · 刷新中':'')+
-    (q?.ErrorCode?'；额度：'+failureText(q.ErrorCode):'')+(u?.ErrorCode?'；日志：'+failureText(u.ErrorCode):'');
+    (q?.ErrorCode?'；额度：'+failureText(q.ErrorCode):'')+(u?.ErrorCode?'；日志：'+failureText(u.ErrorCode):''));
   document.querySelectorAll('.updated').forEach(el=>el.textContent='最近尝试 '+stamp(r?.AttemptedAt));
 }
 const num = value => Number(value || 0);
@@ -78,8 +96,9 @@ function quotas() {
   $('quota').innerHTML=windows.map((w,index)=>{
     const value=preferences?.ShowRemaining?w.RemainingPercent:w.UsedPercent;
     const remaining=w.ResetsAt?Math.max(0,w.ResetsAt-Date.now()):null;
+    const health=w.RemainingPercent==null?'neutral':w.RemainingPercent>=50?'good':w.RemainingPercent>=20?'warn':'low';
     const reset=stateLabel(data.QuotaState,data.QuotaValidity?.[index])+' · '+(remaining===null?'重置时间未知':remaining===0?'窗口已到期，等待刷新':`${Math.floor(remaining/86400000)}天 ${Math.floor(remaining%86400000/3600000)}小时 ${Math.floor(remaining%3600000/60000)}分钟后重置`);
-    return `<article class="quota-card"><div class="quota-title"><strong>${escapeHtml(w.Label==='5h'?'5 小时额度':w.Label==='7d'?'每周额度':w.Label)}</strong><span>${preferences?.ShowRemaining?'剩余':'已使用'}</span></div><div class="quota-number">${value==null?'--':Math.round(value)+'%'}</div><div class="track"><span style="width:${Math.max(0,Math.min(100,num(value)))}%"></span></div><div class="quota-reset">${reset}${w.ResetsAt?' · '+new Date(w.ResetsAt).toLocaleString('zh-CN'):''}</div></article>`;
+    return `<article class="quota-card ${health}"><div class="quota-title"><strong>${escapeHtml(w.Label==='5h'?'5 小时额度':w.Label==='7d'?'每周额度':w.Label)}</strong><span>${preferences?.ShowRemaining?'剩余':'已使用'}</span></div><div class="quota-number">${value==null?'--':Math.round(value)+'%'}</div><div class="track"><span style="width:${Math.max(0,Math.min(100,num(value)))}%"></span></div><div class="quota-reset">${reset}${w.ResetsAt?' · '+new Date(w.ResetsAt).toLocaleString('zh-CN'):''}</div></article>`;
   }).join('');
 }
 function quotaWindowName(key) { const window=(data?.Quota||[]).find(item=>item.WindowKey===key); return window?.Label==='5h'?'5 小时额度':window?.Label==='7d'?'每周额度':window?.Label||key||'额度'; }
@@ -94,7 +113,7 @@ function renderQuotaHistory() {
   const x=value=>left+(Number(value)-from)/(to-from)*(width-left-right), y=value=>top+(100-Number(value))/100*(height-top-bottom);
   const byWindow=new Map();points.forEach(p=>{const key=p.WindowKey||'unknown';if(!byWindow.has(key))byWindow.set(key,[]);byWindow.get(key).push(p);});
   const colors=['#53c97e','#8fb7fc','#bb9bfa','#e6ad3e'];let lineIndex=0,markup='';
-  for(const [key,rows] of byWindow){const color=colors[lineIndex++%colors.length];let previous=null,path='',move=true;for(const point of rows){const changed=previous&&Math.abs(Number(point.CycleEnd)-Number(previous.CycleEnd))>60000;if(changed){markup+=`<line class="history-reset" x1="${x(point.ObservedAt).toFixed(1)}" y1="${top}" x2="${x(point.ObservedAt).toFixed(1)}" y2="${height-bottom}"/>`;move=true;}path+=`${move?'M':'L'}${x(point.ObservedAt).toFixed(1)},${y(point.UsedPercent).toFixed(1)} `;move=false;previous=point;}markup+=`<path class="history-line" stroke="${color}" d="${path}"/>`;rows.forEach(point=>{markup+=`<circle class="history-dot" fill="${color}" cx="${x(point.ObservedAt).toFixed(1)}" cy="${y(point.UsedPercent).toFixed(1)}" r="3"><title>${escapeHtml(quotaHistoryLabel(point))}</title></circle>`;});markup+=`<text class="history-key" x="${left+(lineIndex-1)*135}" y="${height-7}" fill="${color}">${escapeHtml(quotaWindowName(key))}</text>`;}
+  for(const [key,rows] of byWindow){const color=colors[lineIndex++%colors.length];let previous=null,path='',move=true;for(const point of rows){const changed=previous&&Math.abs(Number(point.CycleEnd)-Number(previous.CycleEnd))>60000;if(changed){markup+=`<line class="history-reset" x1="${x(point.ObservedAt).toFixed(1)}" y1="${top}" x2="${x(point.ObservedAt).toFixed(1)}" y2="${height-bottom}"/>`;move=true;}path+=`${move?'M':'L'}${x(point.ObservedAt).toFixed(1)},${y(point.UsedPercent).toFixed(1)} `;move=false;previous=point;}markup+=`<path class="history-line" stroke="${color}" d="${path}"/>`;rows.forEach(point=>{markup+=`<circle class="history-dot" fill="${color}" cx="${x(point.ObservedAt).toFixed(1)}" cy="${y(point.UsedPercent).toFixed(1)}" r="3"><title>${escapeHtml(quotaHistoryLabel(point))}</title></circle>`;});markup+=`<text class="history-key" x="${left+72+(lineIndex-1)*135}" y="${height-7}" fill="${color}">${escapeHtml(quotaWindowName(key))}</text>`;}
   for(const value of [0,50,100])markup+=`<line class="history-grid" x1="${left}" y1="${y(value)}" x2="${width-right}" y2="${y(value)}"/><text class="history-key" x="2" y="${y(value)+4}">${value}%</text>`;
   target.innerHTML=`<svg viewBox="0 0 ${width} ${height}" aria-label="${escapeHtml(quotaRange)}额度已用百分比历史">${markup}<text class="history-key" x="${left}" y="${height-7}">${new Date(from).toLocaleDateString('zh-CN')}</text><text class="history-key" text-anchor="end" x="${width-right}" y="${height-7}">${new Date(to).toLocaleDateString('zh-CN')}</text></svg>`;
   caption.textContent=`${points.length} 个确认观测 · 曲线为已用百分比，虚线表示重置周期变化；缺测不会补线。`;
@@ -139,6 +158,26 @@ function selected() {
     return {...sum(models),DateLabel:row.DateLabel,Models:models};
   });
 }
+function renderPricingStatus() {
+  const s=data?.Pricing;
+  let message=!s?.Available?'尚无可用远程费率，使用内置费率补缺。':
+    `${s.Stale?'保留上次缓存，等待更新。':'自动费率已读取。'}${s.EffectiveDate?'数据日期 '+s.EffectiveDate+' · ':''}上次成功 ${stamp(s.FetchedAt)} · 可用模型 ${s.ModelCount} 个。`;
+  if(s?.Source)message+=' 来源：'+s.Source+'。';
+  if(s?.RejectedModelCount>0)message+=` 已忽略 ${s.RejectedModelCount} 条不可用价格。`;
+  if(!connected)message='连接中断，显示上次费率状态。'+message;
+  $('pricing-source-status').textContent=message;
+}
+function renderExchangeRateStatus() {
+  const s=data?.ExchangeRate, automatic=preferences?.AutoExchangeRate!==false;
+  let message=automatic?'自动在线汇率。':'当前使用手动汇率；在线参考值仍会更新。';
+  if(s?.Available)message+=`1 USD = ${s.Rate} CNY · 参考日期 ${s.AsOf || '未知'} · 上次成功 ${stamp(s.FetchedAt)}。${s.Stale?' 当前保留上次缓存，等待更新。':''}`;
+  else message+='尚无可用在线汇率，'+(automatic?'暂用已保存的参考值。':'请手动设置换算值。');
+  if(s?.Source)message+=' 来源：'+s.Source+'。';
+  if(!connected)message='连接中断，显示上次汇率状态。'+message;
+  $('exchange-source-status').textContent=message;
+  const mode=!automatic?'手动参考汇率':!s?.Available?'在线暂不可用，参考值':`${s.Stale?'在线缓存':'在线参考汇率'} · ${s.AsOf || '日期未知'}`;
+  $('fx-caption').textContent=preferences?.Currency==='CNY'?`人民币 · 1 USD = ${preferences.ExchangeRate} CNY（${mode}）${connected?'':' · 连接中断'}`:'美元 USD';
+}
 function render() {
   if(!data)return;
   quotas();
@@ -157,8 +196,7 @@ function render() {
   $('daily-table').innerHTML=selectedRows.length?[...selectedRows].reverse().map(row=>`<details data-date="${row.DateLabel}" ${openDates.has(row.DateLabel)?'open':''}><summary><span class="daily-date">${row.DateLabel}</span><span class="daily-total">${exact(row.TotalTokens)} Tokens · 未缓存 ${exact(row.UncachedInput)} / 缓存 ${exact(row.CachedInput)} / 输出 ${exact(row.Output)}</span><strong>${cost(row,true)}</strong></summary>${modelTable(row.Models)}</details>`).join(''):'<div class="empty">此日期范围暂无记录。</div>';
   const currency=preferences?.Currency || 'USD';
   document.querySelectorAll('.currency-caption').forEach(el=>el.textContent=`费用单位：${currency}`);
-  $('fx-caption').textContent=currency==='CNY'?`人民币 · 1 USD = ${preferences.ExchangeRate} CNY（手动参考汇率）`:'美元 USD';
-  freshness();reminderStatus();
+  freshness();reminderStatus();renderPricingStatus();renderExchangeRateStatus();
 }
 function setRange(days) {
   range=days; $('to').value=today(); $('from').value=dateOffset(today(),1-days);
@@ -169,6 +207,8 @@ function fillSettings() {
   $('currency').value=preferences.Currency;
   if(settingsDirty)return;
   $('settings-currency').value=preferences.Currency; $('exchange').value=preferences.ExchangeRate;
+  $('exchange-auto').checked=preferences.AutoExchangeRate!==false;
+  exchangeInputMode();
   $('interval').value=preferences.RefreshInterval; $('remaining').value=String(preferences.ShowRemaining); $('autostart').checked=preferences.AutoStart;
   const r=preferences.Reminders || {};
   for(const [id,key] of Object.entries(reminderChecks))$(id).checked=r[key] ?? key!=='QuietHoursEnabled';
@@ -180,6 +220,11 @@ function fillSettings() {
   $('taskbar-mode').value=t.SelectionMode;$('taskbar-cost').checked=t.ShowCost;$('taskbar-countdown').checked=t.ShowCountdown;
   fillTaskbarWindows(t.SelectedWindowKey);
   formBaseline=JSON.parse(JSON.stringify(preferences));
+}
+function exchangeInputMode() {
+  const automatic=$('exchange-auto').checked;
+  $('exchange').disabled=automatic;
+  $('exchange-help').textContent=automatic?'自动采用最新在线参考值；保存后同步网页与任务栏。':'1 USD = 此数值 CNY；保存后使用手动汇率。';
 }
 function fillTaskbarWindows(key=$('taskbar-window').value) {
   const windows=(data?.Quota || []).filter(w=>w?.WindowKey);
@@ -196,8 +241,10 @@ function readTaskbarSettings() {
   return {DisplayMode:$('taskbar-display-mode').value,SelectionMode:$('taskbar-mode').value,SelectedWindowKey:$('taskbar-window').value,ShowCost:$('taskbar-cost').checked,ShowCountdown:$('taskbar-countdown').checked};
 }
 function formPatch() {
-  const all={RefreshInterval:Number($('interval').value),ShowRemaining:$('remaining').value==='true',AutoStart:$('autostart').checked,Currency:$('settings-currency').value,ExchangeRate:Number($('exchange').value)};
+  const all={RefreshInterval:Number($('interval').value),ShowRemaining:$('remaining').value==='true',AutoStart:$('autostart').checked,Currency:$('settings-currency').value,AutoExchangeRate:$('exchange-auto').checked};
+  if(!all.AutoExchangeRate)all.ExchangeRate=Number($('exchange').value);
   const result={};for(const [key,value] of Object.entries(all))if(value!==formBaseline?.[key])result[key]=value;
+  if(!all.AutoExchangeRate && formBaseline?.AutoExchangeRate!==false)result.ExchangeRate=all.ExchangeRate;
   for(const [name,values] of [['Reminders',readReminderSettings()],['TaskbarDisplay',readTaskbarSettings()]]) {
     const patch={};for(const [key,value] of Object.entries(values))if(value!==formBaseline?.[name]?.[key])patch[key]=value;
     if(Object.keys(patch).length)result[name]=patch;
@@ -212,7 +259,7 @@ async function taskbarPreview() {
   $('taskbar-settings-error').textContent=preferences.TaskbarSettingsError || '';
   $('taskbar-settings-error').hidden=!preferences.TaskbarSettingsError;
   try {
-    const draft=settingsDirty?{TaskbarDisplay:readTaskbarSettings(),ShowRemaining:$('remaining').value==='true',Currency:$('settings-currency').value,ExchangeRate:Number($('exchange').value)}:undefined;
+    const draft=settingsDirty?{TaskbarDisplay:readTaskbarSettings(),ShowRemaining:$('remaining').value==='true',Currency:$('settings-currency').value,AutoExchangeRate:$('exchange-auto').checked,ExchangeRate:$('exchange-auto').checked?preferences.ExchangeRate:Number($('exchange').value)}:undefined;
     const view=await api('taskbar-preview',draft);
     if(sequence!==previewSequence || view.Revision<(preferences.Revision || 0))return;
     $('taskbar-preview-prefix').textContent=view.Prefix;$('taskbar-preview-percent').textContent=view.Percent;
@@ -240,7 +287,7 @@ function reminderStatus() {
   const s=data?.ReminderStatus, r=preferences?.Reminders;
   const errors={state_read_failed:'提醒状态无法读取，自动提醒已暂停',state_write_failed:'提醒状态无法保存，自动提醒已暂停',state_evaluation_failed:'提醒状态处理失败，自动提醒已暂停',notification_failed:'上次系统通知调用失败，该提醒不会重复发送',settings_read_failed:'提醒设置无法读取，请重新保存设置',settings_write_failed:'提醒设置保存失败，请重新保存设置'};
   let message=!connected?'连接中断，提醒状态暂无法确认':s?.ErrorCode?errors[s.ErrorCode]||'提醒暂不可用':!r?'等待提醒设置':r.Enabled===false?'额度提醒已关闭':r.SnoozeUntilUtcMs>Date.now()?'额度提醒暂停至 '+stamp(r.SnoozeUntilUtcMs):s?.Suppression==='quiet_hours'?'额度提醒处于定时免打扰':'额度提醒已开启，仅依据有效在线新数据';
-  $('reminder-status-text').textContent=message;
+  updateNotice('reminder-status',message);
   const rebuild=connected&&s?.StorageAvailable===false;
   $('reminder-rebuild').hidden=!rebuild;$('reminder-rebuild-help').hidden=!rebuild;
 }
@@ -260,7 +307,7 @@ async function load() {
     if(!$('from').value || (range&&oldToday!==data.LocalDate))setRange(range || 7);
     fillSettings();render();taskbarPreview();loadQuotaHistory();
     notice(data.Error || (data.Daily===null?'正在扫描本地会话，请稍候…':''));
-  } catch(error) {connected=false;freshness();reminderStatus();notice('暂时无法连接托盘程序。请确认程序仍在运行；已载入的数据将保留。');}
+  } catch(error) {connected=false;freshness();reminderStatus();renderPricingStatus();renderExchangeRateStatus();notice('暂时无法连接托盘程序。请确认程序仍在运行；已载入的数据将保留。');}
   finally{loading=false;}
 }
 async function savePreferences(next) {
@@ -282,7 +329,14 @@ for(const id of ['from','to'])$(id).addEventListener('change',()=>{
 });
 $('model').addEventListener('change',render);
 $('pricing-save').addEventListener('click',async()=>{try{const value=JSON.parse($('pricing-json').value||'{}');await api('pricing',value);$('pricing-status').textContent='已保存；正在重新汇总费用。';}catch(error){$('pricing-status').textContent='费率格式或数值无效：'+error.message;}});
-$('pricing-reset').addEventListener('click',async()=>{try{await api('pricing',{});$('pricing-json').value='';$('pricing-status').textContent='已恢复内置费率；正在重新汇总费用。';}catch(error){$('pricing-status').textContent='恢复失败：'+error.message;}});
+$('pricing-reset').addEventListener('click',async()=>{try{await api('pricing',{});$('pricing-json').value='';$('pricing-status').textContent='已清除手动覆盖，恢复自动费率；正在重新汇总费用。';}catch(error){$('pricing-status').textContent='清除失败：'+error.message;}});
+$('exchange-auto').addEventListener('change',exchangeInputMode);
+$('rates-refresh').addEventListener('click',async()=>{
+  $('rates-refresh').disabled=true;
+  try{await api('rates/refresh',{});$('rates-refresh-status').textContent='已请求在线更新，结果将自动同步。';await load();}
+  catch(error){$('rates-refresh-status').textContent='在线更新请求失败，请稍后重试。';}
+  finally{$('rates-refresh').disabled=false;}
+});
 $('settings-form').addEventListener('input',()=>{settingsDirty=true;++previewSequence;$('save-status').textContent='有未保存的修改';clearTimeout(previewTimer);previewTimer=setTimeout(taskbarPreview,200);});
 $('settings-form').addEventListener('submit',async event=>{
   event.preventDefault();const button=event.submitter;button.disabled=true;
