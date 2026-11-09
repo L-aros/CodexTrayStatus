@@ -164,7 +164,7 @@ namespace CodexTrayStatus
             ModelRadarPricingDocument result = new ModelRadarPricingDocument {
                 // The upstream API has no catalog-wide pricing effective date.
                 // Never substitute model release dates or the download date.
-                Version = 2, EffectiveDate = null,
+                Version = 3, EffectiveDate = null,
                 Models = new Dictionary<string, RemoteModelPrice>(StringComparer.OrdinalIgnoreCase)
             };
             foreach (string providerKey in FirstPartyProviders)
@@ -260,7 +260,7 @@ namespace CodexTrayStatus
             {
                 if (new FileInfo(cachePath).Length > MaximumJsonLength) throw new InvalidDataException("price_cache_too_large");
                 ModelRadarPricingDocument document = Serializer().Deserialize<ModelRadarPricingDocument>(File.ReadAllText(cachePath));
-                if (document == null || document.Version != 2 || document.FetchedAt <= 0 ||
+                if (document == null || document.Version != 3 || document.FetchedAt <= 0 ||
                     document.FetchedAt > clock().AddMinutes(5).ToUnixTimeMilliseconds() ||
                     document.EffectiveDate != null ||
                     document.Models == null || document.Models.Count == 0) throw new InvalidDataException("invalid_price_cache");

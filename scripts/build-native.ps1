@@ -125,7 +125,7 @@ if (-not (Test-Path $installerScript)) {
     throw "The NSIS installer script was not found: $installerScript"
 }
 
-$setupExe = Join-Path $installerOutput "CodexTrayStatus-Setup.exe"
+$setupExe = Join-Path $installerOutput ("CodexTrayStatus-v" + $Version + "-Setup.exe")
 Write-Host "Building per-user installer..."
 & $makeNsis "/INPUTCHARSET" "UTF8" "/DAPP_SOURCE=$applicationExe" "/DAPP_VERSION=$Version" "/DOUTPUT_FILE=$setupExe" $installerScript
 if ($LASTEXITCODE -ne 0) {

@@ -91,7 +91,7 @@ namespace CodexTrayStatus
                 Row("wrong-id", "2", "0.2", "10").Replace("\"id\":\"wrong-id\"", "\"id\":\"different-model\""),
                 "\"malformed\":null");
             ModelRadarPricingDocument parsed = ModelRadarPricingService.Parse(rows);
-            Check(parsed.Version == 2 && parsed.EffectiveDate == null, "A source without an effective date must not invent one");
+            Check(parsed.Version == 3 && parsed.EffectiveDate == null, "A source without an effective date must not invent one");
             Check(parsed.Models.Count == 3, "Only valid first-party rates should survive filtering");
             Check(parsed.Models["gpt-test"].Input == 2m && parsed.Models["gpt-test"].Cached == 0.2m &&
                 parsed.Models["gpt-test"].Output == 10m, "Input/cache/output fields must retain their exact meanings");

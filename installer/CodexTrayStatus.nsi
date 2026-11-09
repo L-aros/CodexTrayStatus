@@ -11,7 +11,7 @@ SetDatablockOptimize on
   !define APP_VERSION "0.4.8"
 !endif
 !ifndef OUTPUT_FILE
-  !define OUTPUT_FILE "..\artifacts\installer\CodexTrayStatus-Setup.exe"
+  !define OUTPUT_FILE "..\artifacts\installer\CodexTrayStatus-v${APP_VERSION}-Setup.exe"
 !endif
 
 !define PRODUCT_NAME "Codex Tray Status"

@@ -23,7 +23,7 @@
 
 ## 安装
 
-推荐从 [GitHub Releases](https://github.com/L-aros/CodexTrayStatus/releases) 下载 `CodexTrayStatus-Setup.exe`。本地构建时，安装包位于 `artifacts/installer/CodexTrayStatus-Setup.exe`。
+推荐从 [GitHub Releases](https://github.com/L-aros/CodexTrayStatus/releases) 下载 `CodexTrayStatus-v<版本号>-Setup.exe`（如 `CodexTrayStatus-v0.4.8-Setup.exe`）。本地构建时，安装包位于 `artifacts/installer/CodexTrayStatus-v<版本号>-Setup.exe`。
 
 - 按当前用户安装到 %LOCALAPPDATA%/Programs/CodexTrayStatus
 - 不需要管理员权限
@@ -34,8 +34,8 @@
 发布包通过 [Sigstore Cosign](https://docs.sigstore.dev/cosign/signing/signing_with_blobs/) 无密钥签名，安装包和独立 EXE 各附带一个 `.sigstore.json` 文件。下载发布页中的安装包及同名签名包后，可验证来源和文件完整性：
 
 ~~~powershell
-cosign verify-blob .\CodexTrayStatus-Setup.exe `
-  --bundle .\CodexTrayStatus-Setup.exe.sigstore.json `
+cosign verify-blob .\CodexTrayStatus-v0.4.8-Setup.exe `
+  --bundle .\CodexTrayStatus-v0.4.8-Setup.exe.sigstore.json `
   --certificate-identity 'https://github.com/L-aros/CodexTrayStatus/.github/workflows/release.yml@refs/tags/v0.4.6' `
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
 ~~~
@@ -80,7 +80,7 @@ cosign verify-blob .\CodexTrayStatus-Setup.exe `
 
 ~~~text
 artifacts/native/CodexTrayStatus.exe
-artifacts/installer/CodexTrayStatus-Setup.exe
+artifacts/installer/CodexTrayStatus-v0.4.8-Setup.exe
 ~~~
 
 ## 当前边界与 macOS 计划
