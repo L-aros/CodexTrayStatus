@@ -10,11 +10,13 @@
 
 ## 模型费率
 
-`ModelRadarPricingService` 为兼容宿主保留原类型名，实际读取 [Models.dev](https://models.dev/api.json) 的 `openai.models`，使用 `cost.input`、`cost.cache_read`、`cost.output`，单位 USD / 百万 Token。选用直接 OpenAI provider，不使用代理或其他厂商报价。定价可对照 [OpenAI 官方资料](https://developers.openai.com/api/docs/pricing)。原 ModelRadar 响应出现缓存价与输出价错位，已替换。
+`ModelRadarPricingService` 为兼容宿主保留原类型名，实际读取 [Models.dev](https://models.dev/api.json)，使用 `cost.input`、`cost.cache_read`、`cost.output`，单位 USD / 百万 Token。只解析第一方模型厂商（openai / anthropic / google / xai / deepseek / zhipuai / zai / mistral / cohere / meta / alibaba / minimax / moonshotai），不读取 OpenRouter、GitHub Copilot 等代理或聚合器的报价，避免其转售价污染官方价。同一模型被多个第一方厂商键重复列出时，保留白名单中较早的厂商报价。定价可对照 [OpenAI 官方资料](https://developers.openai.com/api/docs/pricing)。原 ModelRadar 响应出现缓存价与输出价错位，已替换。
+
+模型名先剥离第三方路由前缀（如 `trae-cn/`、`zcode/`），精确匹配失败时再尝试剥离结尾的 `-max` 变体后缀一次；`-pro` 是真实且独立的模型档位，绝不剥离。手动覆盖仍按原始模型名精确匹配优先。
 
 每六小时检查，失败后一小时重试；缓存 `%LOCALAPPDATA%/CodexTrayStatus/models-dev-prices.json`，版本 2，不读取旧源缓存。上游无全局价格生效日，`EffectiveDate` 保持 null，页面只展示真实读取时间。输入/缓存/输出缺项保持 nullable，由内置价格补齐；不能补齐的模型保持待定价，异常记录不发布。
 
-费率优先级：手动覆盖 → 有效远程价格 → 内置价格。价格变化后清理会话费用缓存、重新汇总已读日志；Token 数量不变。历史费用按当前费率估算，不表示实际账单或历史成交价。
+费率优先级：手动覆盖 → 有效远程价格 → 内置价格。价格变化后清理会话费用缓存、重新汇总已读日志；Token 数量不变。历史费用按当前费率估算，不表示实际账单或历史成交价。第三方模型（如 DeepSeek、GLM）现在可从第一方远程价格自动关联，无需手动覆盖。
 
 ## API 与刷新
 

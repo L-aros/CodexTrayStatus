@@ -36,10 +36,10 @@ namespace CodexTrayStatus
     internal sealed class ModelRadarPricingService
     {
         // Keep the legacy type name for the host API, but use the maintained
-        // Models.dev catalog for the direct OpenAI provider. The feed's legacy
-        // cost fields are explicitly USD per million text tokens.
+        // Models.dev catalog. Prices come from first-party model makers only;
+        // the feed's legacy cost fields are explicitly USD per million text tokens.
         internal const string Url = "https://models.dev/api.json";
-        internal const string SourceName = "Models.dev · OpenAI";
+        internal const string SourceName = "Models.dev";
         internal const string SourceUrl = "https://models.dev/";
         private const int MaximumJsonLength = 16 * 1024 * 1024;
         private readonly HttpClient client;
@@ -146,45 +146,66 @@ namespace CodexTrayStatus
             }
         }
 
+        // Only first-party model makers contribute prices. Aggregators and
+        // proxies (OpenRouter, GitHub Copilot, routing-run, ...) re-list OpenAI
+        // and other vendors at different rates, which would pollute official
+        // pricing. List order also breaks ties when one maker appears under two
+        // provider keys (e.g. Zhipu's zhipuai vs zai).
+        private static readonly string[] FirstPartyProviders = {
+            "openai", "anthropic", "google", "xai", "deepseek",
+            "zhipuai", "zai", "mistral", "cohere", "meta",
+            "alibaba", "minimax", "moonshotai"
+        };
+
         internal static ModelRadarPricingDocument Parse(string json)
         {
             Dictionary<string, object> root = Serializer().DeserializeObject(json) as Dictionary<string, object>;
-            Dictionary<string, object> provider = root == null ? null : Get(root, "openai") as Dictionary<string, object>;
-            if (provider == null || !Equals(Get(provider, "id"), "openai"))
-                throw new InvalidDataException("unsupported_price_feed");
-            Dictionary<string, object> rows = Get(provider, "models") as Dictionary<string, object>;
-            if (rows == null) throw new InvalidDataException("missing_price_models");
+            if (root == null) throw new InvalidDataException("unsupported_price_feed");
             ModelRadarPricingDocument result = new ModelRadarPricingDocument {
                 // The upstream API has no catalog-wide pricing effective date.
                 // Never substitute model release dates or the download date.
                 Version = 2, EffectiveDate = null,
                 Models = new Dictionary<string, RemoteModelPrice>(StringComparer.OrdinalIgnoreCase)
             };
-            HashSet<string> duplicates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (KeyValuePair<string, object> item in rows)
+            foreach (string providerKey in FirstPartyProviders)
             {
-                Dictionary<string, object> row = item.Value as Dictionary<string, object>;
-                string id = item.Key;
-                Dictionary<string, object> costs = row == null ? null : Get(row, "cost") as Dictionary<string, object>;
-                decimal? input, cachedInput, output;
-                if (string.IsNullOrWhiteSpace(id) || costs == null || !Equals(Get(row, "id"), id) ||
-                    !ReadRate(Get(costs, "input"), out input) ||
-                    !ReadRate(Get(costs, "cache_read"), out cachedInput) ||
-                    !ReadRate(Get(costs, "output"), out output) ||
-                    !Valid(new RemoteModelPrice { Input = input, Cached = cachedInput, Output = output }))
+                Dictionary<string, object> provider = Get(root, providerKey) as Dictionary<string, object>;
+                if (provider == null || !Equals(Get(provider, "id"), providerKey)) continue;
+                Dictionary<string, object> rows = Get(provider, "models") as Dictionary<string, object>;
+                if (rows == null) continue;
+                HashSet<string> localDuplicates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (KeyValuePair<string, object> item in rows)
                 {
-                    result.RejectedModelCount++;
-                    continue;
+                    Dictionary<string, object> row = item.Value as Dictionary<string, object>;
+                    string id = item.Key;
+                    Dictionary<string, object> costs = row == null ? null : Get(row, "cost") as Dictionary<string, object>;
+                    decimal? input, cachedInput, output;
+                    if (string.IsNullOrWhiteSpace(id) || costs == null || !Equals(Get(row, "id"), id) ||
+                        !ReadRate(Get(costs, "input"), out input) ||
+                        !ReadRate(Get(costs, "cache_read"), out cachedInput) ||
+                        !ReadRate(Get(costs, "output"), out output) ||
+                        !Valid(new RemoteModelPrice { Input = input, Cached = cachedInput, Output = output }))
+                    {
+                        result.RejectedModelCount++;
+                        continue;
+                    }
+                    // A duplicate inside one provider is ambiguous and is rejected
+                    // outright; a model re-listed by a later provider keeps the
+                    // first-party rate already present.
+                    if (localDuplicates.Contains(id))
+                    {
+                        result.Models.Remove(id);
+                        result.RejectedModelCount += 2;
+                        continue;
+                    }
+                    if (result.Models.ContainsKey(id))
+                    {
+                        result.RejectedModelCount++;
+                        continue;
+                    }
+                    localDuplicates.Add(id);
+                    result.Models.Add(id, new RemoteModelPrice { Input = input, Cached = cachedInput, Output = output });
                 }
-                // Duplicate IDs are ambiguous; do not let response order pick a price.
-                if (duplicates.Contains(id) || result.Models.ContainsKey(id))
-                {
-                    if (result.Models.Remove(id)) result.RejectedModelCount++;
-                    duplicates.Add(id);
-                    result.RejectedModelCount++;
-                    continue;
-                }
-                result.Models.Add(id, new RemoteModelPrice { Input = input, Cached = cachedInput, Output = output });
             }
             if (result.Models.Count == 0) throw new InvalidDataException("no_usable_price_models");
             return result;

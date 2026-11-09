@@ -72,22 +72,6 @@
       </div>
       <div id="today-cards" class="metrics"></div>
 
-      <div class="panel quota-history-panel">
-        <div class="panel-heading">
-          <div>
-            <h2>额度历史</h2>
-            <p id="quota-history-caption">仅记录确认的在线额度观测；缺测不会补线。</p>
-          </div>
-          <div class="segments" aria-label="额度历史范围">
-            <button data-quota-range="24h">24 小时</button>
-            <button data-quota-range="7d" class="active">7 天</button>
-            <button data-quota-range="30d">30 天</button>
-            <button data-quota-range="90d">90 天</button>
-          </div>
-        </div>
-        <div id="quota-history" class="quota-history" role="img" aria-label="额度历史图"></div>
-      </div>
-
       <div class="panel reset-announcements-panel">
         <div class="panel-heading">
           <div>
@@ -244,8 +228,8 @@
           </div>
           <div class="settings-panel-body">
             <p id="pricing-source-status" role="status">正在读取自动费率状态…</p>
-            <p>每 6 小时检查 Models.dev 的 OpenAI 费率。可对照 <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noopener noreferrer">OpenAI 官方定价 ↗</a>；未提供全局生效日期时仅显示读取时间。</p>
-            <p>手动覆盖格式为 JSON：模型名对应 Input、Cached、Output（USD / 1M Token）。无完整费率的模型保持待定价。</p>
+            <p>每 6 小时检查 Models.dev 的第一方厂商费率（OpenAI、Anthropic、DeepSeek、GLM 等）。可对照 <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noopener noreferrer">OpenAI 官方定价 ↗</a>；未提供全局生效日期时仅显示读取时间。</p>
+            <p>手动覆盖格式为 JSON：模型名对应 Input、Cached、Output，单位 USD / 每百万 Token。示例：<code>{"gpt-5.4":{"Input":2.5,"Cached":0.25,"Output":15}}</code>。无完整费率的模型保持待定价。</p>
             <textarea id="pricing-json" rows="5" spellcheck="false" aria-label="模型费率 JSON"></textarea>
             <div class="settings-actions">
               <button id="pricing-save" type="button">保存费率覆盖</button>

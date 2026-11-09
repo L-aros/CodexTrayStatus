@@ -111,6 +111,41 @@ internal static class QuotaServiceSmoke
         }
     }
 
+    private static void CheckNameNormalization(string context, string usage)
+    {
+        Dictionary<string, ModelPrice> previous = PricingCatalog.Snapshot();
+        try
+        {
+            PricingCatalog.Replace(null);
+            // First-party remote catalog keys are matched after stripping routing
+            // prefixes and, as a final fallback, a trailing "-max" variant suffix.
+            PricingCatalog.ReplaceRemote(new Dictionary<string, RemoteModelPrice> {
+                { "deepseek-v4-pro", new RemoteModelPrice { Input = 2m, Cached = 0.2m, Output = 8m } },
+                { "glm-5.3", new RemoteModelPrice { Input = 3m, Cached = 0.3m, Output = 9m } },
+                { "qwen-max", new RemoteModelPrice { Input = 4m, Cached = 0.4m, Output = 10m } }
+            });
+
+            DailyUsage routed = PriceUsage("trae-cn/DeepSeek-V4-Pro-max", context, usage);
+            Check(routed.UnpricedTokens == 0 && routed.Models[0].InputRate == 2m,
+                "a routed -max variant must fall back to the catalog key after stripping prefix and suffix");
+            DailyUsage prefixed = PriceUsage("zcode/GLM-5.3", context, usage);
+            Check(prefixed.UnpricedTokens == 0 && prefixed.Models[0].InputRate == 3m,
+                "a routing prefix must be stripped to match a first-party catalog key");
+            DailyUsage exactMax = PriceUsage("qwen-max", context, usage);
+            Check(exactMax.UnpricedTokens == 0 && exactMax.Models[0].InputRate == 4m,
+                "a genuine -max model must match its own key rather than a stripped fallback");
+
+            DailyUsage unknown = PriceUsage("some/vendor-unknown-model", context, usage);
+            Check(unknown.UnpricedTokens == 1100 && unknown.EstimatedCost == 0m,
+                "an unknown routed model must remain unpriced rather than guessing");
+        }
+        finally
+        {
+            PricingCatalog.Replace(previous);
+            PricingCatalog.ReplaceRemote(null);
+        }
+    }
+
     private static void Main()
     {
         long now = 1760000000000L;
@@ -175,6 +210,7 @@ internal static class QuotaServiceSmoke
         Check(custom[0].UnpricedTokens == 0 && custom[0].EstimatedCost > 0, "local price override must price an otherwise unknown model");
         PricingCatalog.Reset("future-model");
         CheckPricingPath(nativeContext, usage);
+        CheckNameNormalization(nativeContext, usage);
         string cumulativeUsage = usage.Replace("last_token_usage", "total_token_usage");
         List<DailyUsage> repeated = QuotaService.SummarizeDailyJsonl(new[] { nativeContext, cumulativeUsage,
             cumulativeUsage.Replace(stamp, DateTimeOffset.Now.AddSeconds(2).ToString("o")) });

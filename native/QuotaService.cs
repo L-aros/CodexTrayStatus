@@ -1057,10 +1057,49 @@ namespace CodexTrayStatus
         {
             ModelPrice custom;
             if (PricingCatalog.TryGet(model, out custom)) return new Price(custom.Input, custom.Cached, custom.Output);
+            string normalized = NormalizeModelName(model);
+            if (!string.Equals(normalized, model, StringComparison.OrdinalIgnoreCase) &&
+                PricingCatalog.TryGet(normalized, out custom)) return new Price(custom.Input, custom.Cached, custom.Output);
+            Price result = ResolvePrice(normalized);
+            if (result.Known) return result;
+            // Routing variants sometimes append a "-max" suffix that has no
+            // distinct catalog entry (e.g. "trae-cn/DeepSeek-V4-Pro-max").
+            // Fall back once; "-pro" is a real, distinct model tier and is
+            // never stripped.
+            string withoutMax = StripTrailingMax(normalized);
+            if (withoutMax != null && !string.Equals(withoutMax, normalized, StringComparison.OrdinalIgnoreCase))
+            {
+                if (PricingCatalog.TryGet(withoutMax, out custom)) return new Price(custom.Input, custom.Cached, custom.Output);
+                result = ResolvePrice(withoutMax);
+                if (result.Known) return result;
+            }
+            return default(Price);
+        }
+
+        private static Price ResolvePrice(string model)
+        {
             Price builtIn = BuiltInPriceFor(model);
             ModelPrice merged = PricingCatalog.ApplyRemote(model, builtIn.Known
                 ? new ModelPrice { Input = builtIn.Input, Cached = builtIn.Cached, Output = builtIn.Output } : null);
             return merged == null ? default(Price) : new Price(merged.Input, merged.Cached, merged.Output);
+        }
+
+        // Strip third-party routing prefixes (e.g. "trae-cn/", "zcode/") so a
+        // logged model name matches the catalog key it refers to.
+        private static string NormalizeModelName(string model)
+        {
+            if (string.IsNullOrEmpty(model)) return string.Empty;
+            string name = model.Trim();
+            int slash = name.LastIndexOf('/');
+            if (slash >= 0 && slash < name.Length - 1) name = name.Substring(slash + 1);
+            return name.Trim();
+        }
+
+        private static string StripTrailingMax(string model)
+        {
+            if (string.IsNullOrEmpty(model) || model.Length <= 4) return null;
+            if (!model.EndsWith("-max", StringComparison.OrdinalIgnoreCase)) return null;
+            return model.Substring(0, model.Length - 4);
         }
 
         private static Price BuiltInPriceFor(string model)

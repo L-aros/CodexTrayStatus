@@ -89,6 +89,8 @@ a:hover { color: var(--text); text-decoration: underline; }
 
 ::selection { background: rgba(154, 169, 189, 0.28); }
 
+code { font-family: var(--mono); font-size: 0.92em; background: rgba(255,255,255,0.06); border: 1px solid var(--line-soft); border-radius: 5px; padding: 1px 5px; }
+
 :focus-visible { outline: 2px solid rgba(230, 235, 241, 0.55); outline-offset: 3px; border-radius: 5px; }
 
 h1, h2, p { margin: 0; }
@@ -748,19 +750,6 @@ footer {
 #pricing-status { color: var(--muted); font-size: 12px; line-height: 1.5; }
 #pricing-status:empty { display: none; }
 .settings-help { color: var(--muted); font-size: 12px; line-height: 1.65; margin: 0 0 14px; }
-
-/* ==========================================================================
-   Quota history chart
-   ========================================================================== */
-
-.quota-history { padding: 0 25px 25px; min-height: 190px; overflow-x: auto; }
-.quota-history svg { display: block; width: 100%; min-width: 520px; height: 190px; }
-.quota-history .history-empty { padding: 48px 18px; color: var(--muted); text-align: center; }
-.quota-history .history-key { font-size: 11px; fill: var(--muted); }
-.quota-history .history-grid { stroke: rgba(138, 151, 168, 0.22); stroke-width: 1; }
-.quota-history .history-line { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
-.quota-history .history-dot { stroke: none; }
-.quota-history .history-reset { stroke: var(--amber); stroke-dasharray: 3 4; }
 
 /* ==========================================================================
    Reset announcements

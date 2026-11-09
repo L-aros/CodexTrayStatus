@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const fields = ['Input','CachedInput','UncachedInput','Output','TotalTokens','EstimatedCost','CachedInputCost','UncachedInputCost','OutputCost','UnpricedTokens'];
-let data = null, preferences = null, range = 7, selectedRows = [], settingsDirty = false, loading = false, quotaHistory = null, quotaRange = '7d';
+let data = null, preferences = null, range = 7, selectedRows = [], settingsDirty = false, loading = false;
 let connected = true, resetAnnouncements = null;
 let formBaseline = null, previewSequence = 0, previewTimer = null;
 const dismissedNotices = new Set();
@@ -101,24 +101,6 @@ function quotas() {
     return `<article class="quota-card ${health}"><div class="quota-title"><strong>${escapeHtml(w.Label==='5h'?'5 小时额度':w.Label==='7d'?'每周额度':w.Label)}</strong><span>${preferences?.ShowRemaining?'剩余':'已使用'}</span></div><div class="quota-number">${value==null?'--':Math.round(value)+'%'}</div><div class="track"><span style="width:${Math.max(0,Math.min(100,num(value)))}%"></span></div><div class="quota-reset">${reset}${w.ResetsAt?' · '+new Date(w.ResetsAt).toLocaleString('zh-CN'):''}</div></article>`;
   }).join('');
 }
-function quotaWindowName(key) { const window=(data?.Quota||[]).find(item=>item.WindowKey===key); return window?.Label==='5h'?'5 小时额度':window?.Label==='7d'?'每周额度':window?.Label||key||'额度'; }
-function quotaHistoryLabel(point) { return `${quotaWindowName(point.WindowKey)} · ${new Date(point.ObservedAt).toLocaleString('zh-CN')} · 剩余 ${Number(point.RemainingPercent).toFixed(1)}%`; }
-function renderQuotaHistory() {
-  const target=$('quota-history'), caption=$('quota-history-caption');
-  if(!quotaHistory){target.innerHTML='<div class="history-empty">正在读取额度历史…</div>';return;}
-  if(!quotaHistory.Available){target.innerHTML='<div class="history-empty">额度历史暂不可用，请等待下一次在线额度更新。</div>';caption.textContent='历史文件暂不可用；当前额度不会受影响。';return;}
-  const points=(quotaHistory.Points||[]).filter(p=>Number.isFinite(Number(p.UsedPercent))&&Number.isFinite(Number(p.RemainingPercent))).sort((a,b)=>a.ObservedAt-b.ObservedAt);
-  if(!points.length){target.innerHTML='<div class="history-empty">此范围还没有确认的在线额度观测。历史从升级后首次成功获取开始记录。</div>';caption.textContent='仅记录确认的在线额度观测；缺测不会补线。';return;}
-  const from=Number(quotaHistory.From),to=Math.max(from+1,Number(quotaHistory.To)), width=760,height=190,left=36,right=12,top=12,bottom=27;
-  const x=value=>left+(Number(value)-from)/(to-from)*(width-left-right), y=value=>top+(100-Number(value))/100*(height-top-bottom);
-  const byWindow=new Map();points.forEach(p=>{const key=p.WindowKey||'unknown';if(!byWindow.has(key))byWindow.set(key,[]);byWindow.get(key).push(p);});
-  const colors=['#53c97e','#8fb7fc','#bb9bfa','#e6ad3e'];let lineIndex=0,markup='';
-  for(const [key,rows] of byWindow){const color=colors[lineIndex++%colors.length];let previous=null,path='',move=true;for(const point of rows){const changed=previous&&Math.abs(Number(point.CycleEnd)-Number(previous.CycleEnd))>60000;if(changed){markup+=`<line class="history-reset" x1="${x(point.ObservedAt).toFixed(1)}" y1="${top}" x2="${x(point.ObservedAt).toFixed(1)}" y2="${height-bottom}"/>`;move=true;}path+=`${move?'M':'L'}${x(point.ObservedAt).toFixed(1)},${y(point.UsedPercent).toFixed(1)} `;move=false;previous=point;}markup+=`<path class="history-line" stroke="${color}" d="${path}"/>`;rows.forEach(point=>{markup+=`<circle class="history-dot" fill="${color}" cx="${x(point.ObservedAt).toFixed(1)}" cy="${y(point.UsedPercent).toFixed(1)}" r="3"><title>${escapeHtml(quotaHistoryLabel(point))}</title></circle>`;});markup+=`<text class="history-key" x="${left+72+(lineIndex-1)*135}" y="${height-7}" fill="${color}">${escapeHtml(quotaWindowName(key))}</text>`;}
-  for(const value of [0,50,100])markup+=`<line class="history-grid" x1="${left}" y1="${y(value)}" x2="${width-right}" y2="${y(value)}"/><text class="history-key" x="2" y="${y(value)+4}">${value}%</text>`;
-  target.innerHTML=`<svg viewBox="0 0 ${width} ${height}" aria-label="${escapeHtml(quotaRange)}额度已用百分比历史">${markup}<text class="history-key" x="${left}" y="${height-7}">${new Date(from).toLocaleDateString('zh-CN')}</text><text class="history-key" text-anchor="end" x="${width-right}" y="${height-7}">${new Date(to).toLocaleDateString('zh-CN')}</text></svg>`;
-  caption.textContent=`${points.length} 个确认观测 · 曲线为已用百分比，虚线表示重置周期变化；缺测不会补线。`;
-}
-async function loadQuotaHistory() { try { quotaHistory=await api(`quota-history?range=${encodeURIComponent(quotaRange)}`);renderQuotaHistory(); } catch { quotaHistory={Available:false};renderQuotaHistory(); } }
 function externalSourceLink(item) {
   try {
     const url=new URL(item?.source?.url);
@@ -181,7 +163,6 @@ function renderExchangeRateStatus() {
 function render() {
   if(!data)return;
   quotas();
-  renderQuotaHistory();
   const days=data.Daily || [];
   const day=days.find(row=>row.DateLabel===today());
   if(day)cards('today-cards',day);else $('today-cards').textContent='暂无有效的今日统计';
@@ -305,7 +286,7 @@ async function load() {
     if([...$('model').options].some(option=>option.value===model))$('model').value=model;
     const first=dateOffset(today(),-89); for(const id of ['from','to']){$(id).min=first;$(id).max=today();}
     if(!$('from').value || (range&&oldToday!==data.LocalDate))setRange(range || 7);
-    fillSettings();render();taskbarPreview();loadQuotaHistory();
+    fillSettings();render();taskbarPreview();
     notice(data.Error || (data.Daily===null?'正在扫描本地会话，请稍候…':''));
   } catch(error) {connected=false;freshness();reminderStatus();renderPricingStatus();renderExchangeRateStatus();notice('暂时无法连接托盘程序。请确认程序仍在运行；已载入的数据将保留。');}
   finally{loading=false;}
@@ -321,7 +302,6 @@ function navigate() {
   taskbarPreview();
 }
 document.querySelectorAll('[data-days]').forEach(el=>el.addEventListener('click',()=>setRange(Number(el.dataset.days))));
-document.querySelectorAll('[data-quota-range]').forEach(el=>el.addEventListener('click',()=>{quotaRange=el.dataset.quotaRange;document.querySelectorAll('[data-quota-range]').forEach(item=>item.classList.toggle('active',item===el));quotaHistory=null;renderQuotaHistory();loadQuotaHistory();}));
 for(const id of ['from','to'])$(id).addEventListener('change',()=>{
   range=0;document.querySelectorAll('[data-days]').forEach(el=>el.classList.remove('active'));
   const valid=$('from').value<=$('to').value&&$('from').value>=$('from').min&&$('to').value<=$('to').max;

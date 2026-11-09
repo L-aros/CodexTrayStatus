@@ -63,6 +63,11 @@ namespace CodexTrayStatus
             return "{\"openai\":{\"id\":\"openai\",\"models\":{" + string.Join(",", rows) + "}}}";
         }
 
+        private static string MultiDocument(string openaiRows, string extraProviders)
+        {
+            return "{\"openai\":{\"id\":\"openai\",\"models\":{" + openaiRows + "}}" + extraProviders + "}";
+        }
+
         private static void RejectDocument(string json, string reason)
         {
             bool rejected = false;
@@ -87,7 +92,7 @@ namespace CodexTrayStatus
                 "\"malformed\":null");
             ModelRadarPricingDocument parsed = ModelRadarPricingService.Parse(rows);
             Check(parsed.Version == 2 && parsed.EffectiveDate == null, "A source without an effective date must not invent one");
-            Check(parsed.Models.Count == 3, "Only valid first-party OpenAI rates should survive filtering");
+            Check(parsed.Models.Count == 3, "Only valid first-party rates should survive filtering");
             Check(parsed.Models["gpt-test"].Input == 2m && parsed.Models["gpt-test"].Cached == 0.2m &&
                 parsed.Models["gpt-test"].Output == 10m, "Input/cache/output fields must retain their exact meanings");
             Check(parsed.Models["partial"].Input == 3m && !parsed.Models["partial"].Cached.HasValue &&
@@ -102,7 +107,7 @@ namespace CodexTrayStatus
             Check(ambiguous.Models.Count == 1 && !ambiguous.Models.ContainsKey("duplicate"),
                 "Duplicate model IDs must not select a rate according to response order");
 
-            RejectDocument(Document(valid).Replace("\"openai\":", "\"other-provider\":"), "Other provider sections must not replace OpenAI pricing");
+            RejectDocument(Document(valid).Replace("\"openai\":", "\"other-provider\":"), "A feed with no first-party provider must fail");
             RejectDocument(Document(valid).Replace("\"id\":\"openai\"", "\"id\":\"other\""), "A mismatched provider identity must fail");
             RejectDocument("{\"openai\":{\"id\":\"openai\",\"models\":[]}}", "An array cannot replace the model dictionary");
             RejectDocument("{broken", "Malformed JSON must fail");
@@ -113,7 +118,26 @@ namespace CodexTrayStatus
             string scoped = Document(valid);
             scoped = scoped.Substring(0, scoped.Length - 1) + ",\"openrouter\":{\"models\":{\"proxy\":{\"id\":\"proxy\",\"cost\":{\"input\":1,\"output\":2,\"cache_read\":0}}}}}";
             Check(ModelRadarPricingService.Parse(scoped).Models.Count == 1,
-                "Provider proxy rates outside OpenAI must never enter the catalog");
+                "Aggregator provider rates outside first-party makers must never enter the catalog");
+
+            // First-party non-OpenAI makers contribute their own models; an
+            // OpenAI model re-listed by a proxy keeps the official rate.
+            string multi = MultiDocument(
+                Row("gpt-5.4", "2.5", "0.25", "15"),
+                ",\"deepseek\":{\"id\":\"deepseek\",\"models\":{" + Row("deepseek-v4-pro", "0.66", "0.022", "1.98") + "}}" +
+                ",\"github-copilot\":{\"id\":\"github-copilot\",\"models\":{" + Row("gpt-5.4", "9", "0.9", "30") + "}}" +
+                ",\"zhipuai\":{\"id\":\"zhipuai\",\"models\":{" + Row("glm-5.3", "1.2", "0.3", "4.2") + "}}" +
+                ",\"zai\":{\"id\":\"zai\",\"models\":{" + Row("glm-5.3", "1.4", "0.26", "4.4") + "}}");
+            ModelRadarPricingDocument expanded = ModelRadarPricingService.Parse(multi);
+            Check(expanded.Models.Count == 3,
+                "First-party non-OpenAI makers must be parsed while proxies and later duplicates are skipped");
+            Check(expanded.Models["deepseek-v4-pro"].Input == 0.66m,
+                "DeepSeek first-party rates must enter the catalog");
+            Check(expanded.Models["glm-5.3"].Input == 1.2m,
+                "A model listed by two first-party makers must keep the earlier rate");
+            Check(expanded.Models["gpt-5.4"].Input == 2.5m,
+                "An OpenAI model re-listed by a proxy must keep the official rate");
+
             ModelRadarPricingDocument officialSample = ModelRadarPricingService.Parse(Document(
                 Row("gpt-5.3-codex", "1.75", "0.175", "14"), Row("gpt-6.1-sol", "2", "0.1", "10")));
             Check(officialSample.Models["gpt-5.3-codex"].Cached == 0.175m &&
@@ -139,7 +163,7 @@ namespace CodexTrayStatus
                 Check(service.Status.Available && !service.Status.Stale && service.Status.ModelCount == 1,
                     "Successful refresh must expose an available fresh catalog");
                 Check(service.Status.FetchedAt > 0 && service.Status.EffectiveDate == null &&
-                    service.Status.Source == "Models.dev · OpenAI" && service.Status.SourceUrl == "https://models.dev/",
+                    service.Status.Source == "Models.dev" && service.Status.SourceUrl == "https://models.dev/",
                     "Fetch metadata must report the actual source without a fabricated effective date");
                 Check(PricingCatalog.ApplyRemote("gpt-test", null).Output == 10m, "Download must publish to the pricing catalog");
                 Check(handler.Urls[0] == "GET https://models.dev/api.json" && !handler.SensitiveHeaders,
