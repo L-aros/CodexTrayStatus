@@ -164,7 +164,7 @@ WebPreferences 新增可空 TaskbarDisplay；缺少或 null 保留当前值，�
 
 保存位置为 HKCU\Software\CodexTrayStatus 的单个字符串 TaskbarDisplayV1（完整 JSON）。TaskbarSettingsStore 注入读取/写入委托；只有写入成功才替换 Current。缺失值加载默认；损坏或未来版本加载默认并通过 WebPreferences.TaskbarSettingsError 提示，读取不覆盖原值，显式重新保存恢复。
 
-POST api/preferences 现在允许旧基础字段的部分补丁：RefreshInterval / ShowRemaining / AutoStart / Currency / ExchangeRate 缺失保留，显式 null 拒绝；原完整请求仍兼容。WebPreferencePatch.Parse 保存字段存在性；服务端仅提前校验，生产 ApplyWebPreferences 在 UI 线程使用最新值再次合并。TaskbarDisplay / Reminders 保持各自可空补丁契约。任务栏布尔字段要求 JSON boolean，不接受字符串。
+POST api/preferences 现在允许旧基础字段的部分补丁：RefreshInterval / ShowRemaining / AutoStart / Currency / ExchangeRate / AutoExchangeRate 缺失保留，显式 null 拒绝；原完整请求仍兼容。WebPreferencePatch.Parse 保存字段存在性；服务端仅提前校验，生产 ApplyWebPreferences 在 UI 线程使用最新值再次合并。TaskbarDisplay / Reminders 保持各自可空补丁契约。任务栏布尔字段及 AutoExchangeRate 要求 JSON boolean，不接受字符串。
 
 网页只提交相对表单初始值发生变化的字段，未修改的提醒、币种、暂停时间均不提交。币种快捷入口只提交 Currency。轮询不覆盖未保存草稿；旧客户端未携带 TaskbarDisplay 不会重置新增默认值。提醒设置错误时，不更改任何控件直接再次保存仍可重写提醒设置恢复。
 
@@ -190,7 +190,9 @@ GET api/taskbar-preview 返回已应用设置的 TaskbarPresentation；POST 同�
 
 网页预览调用原生 Presenter，不复制选择规则。草稿明确标未保存；保存响应后立即重新取已应用预览。请求序号丢弃已失效的预览响应，Revision 防止旧设置 GET 覆盖新保存。设置页每 1.5 秒更新文字预览，沿用全页 5 秒设置/数据同步，重新聚焦立即读取；其他已开页面最多一个既有轮询周期同步。断连/预览失败保留旧文字但显示预览暂不可用，不伪称已同步。预览只展示文本，物理布局以原生测量为准。
 
-TaskbarOverlay 继续复用 1500ms 维护计时器；TaskbarPresenter.VisualKey 不含当前时间/修订号，格式化文本和颜色/状态不变时保持位图缓存，不重复提交。窗口布局变化或 WM_DPICHANGED 重绘。任务栏全屏/自动隐藏、连续三次布局失联隐藏及 z-order 恢复行为保留。
+TaskbarOverlay 复用 1500ms 内容维护计时器和 100ms 层级维护计时器；TaskbarPresenter.VisualKey 不含当前时间/修订号，格式化文本和颜色/状态不变时保持位图缓存，不重复提交。快速维护发现任务栏句柄或通知区几何变化时，当次重新验证、定位并重绘，不先隐藏再等待慢速维护。窗口布局变化或 WM_DPICHANGED 重绘。布局失联、真正全屏应用或任务栏自动隐藏时立即隐藏；有效布局恢复后重新显示并恢复 z-order。显示桌面的 Progman / WorkerW 与系统桌面句柄不算全屏应用，不能因其铺满屏幕而隐藏文字层。
+
+TaskbarWindowEvents 在 UI 线程用 OUTOFCONTEXT | SKIPOWNPROCESS 监听桌面 OBJID_CLIENT 的 EVENT_OBJECT_REORDER，任务栏升到文字层上方时在事件回调内立即重新验证并恢复层级，避免等待下一次 100ms 轮询。该钩子不注入 Explorer，也不改变窗口 owner / parent 或用户前台；启用文字层时注册，切换仅通知区模式及退出时释放，回调防重入。原有计时器在钩子不可用时仍工作；隐藏状态也在快速维护中重试验证，不再只依赖 1500ms 内容刷新恢复。WinEvent 为异步通知，跨进程合成验证不能代替真实鼠标任务栏交互的逐帧验收。
 
 ## 物理布局与验证
 
@@ -198,6 +200,8 @@ TaskbarLayout.Create 根据实际任务栏物理高度选择字体，在同一 G
 
 - scripts/test-native.ps1 新增 TaskbarDisplaySmoke：合成快照、固定时刻、可注入设置读写失败，验证默认/指定/最低/并列/空值/过期/消失恢复/同键歧义、币种、未知费用、跨日、倒计时、旧请求、false/null、非法设置、重启加载及写失败；不读取或修改生产注册表。
 - 离屏矩阵物理高度 24/32/40/48/60/72/84/96/120、宽度 8/25/48/80/120/240/800，涵盖小任务栏及常见 100% 至 250% 对应高度。断言文本矩形和实际字形 alpha 不接触图像边界，输出 artifacts/tests/taskbar PNG；它不等同于真实系统 DPI 切换验收。
+- TaskbarDisplaySmoke 使用真实 Shell / 系统桌面句柄验证桌面不会触发全屏隐藏，不切换用户前台；并覆盖真实全屏、普通最大化、负坐标和异屏窗口的几何判断。无可用主任务栏时明确输出该项 SKIP。
+- TaskbarWindowEventsSmoke 使用透明、屏外、无激活的双进程窗口验证：无订阅时保持遮挡，真实跨进程层级事件在回调内恢复显示，释放订阅后不再回调。独立前台事件观察器验证测试窗口从未成为前台，不操作真实任务栏；纳入 scripts/test-native.ps1。
 - WebDashboardSmoke 覆盖任务栏补丁和已应用/草稿预览；node scripts/run-web-tests.cjs scripts/test-web.cjs scripts/test-web-reminders.cjs scripts/test-web-taskbar.cjs 在真实无头 Edge 中验证原页面和提醒回归、草稿/已应用预览、选择持久化、窗口消失、未知、切换开关、保留其他入口变更、失败草稿、旧响应拒绝和移动布局。全部使用合成服务。
 - scripts/build-native.ps1 -SkipInstaller -NativeOutputDirectory taskbar-verification 输出独立程序；不安装、不启动生产常驻应用。
 

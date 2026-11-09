@@ -87,8 +87,10 @@ namespace CodexTrayStatus
                 }
             }
             value.SuppliedFields = new HashSet<string>(fields.Keys, StringComparer.Ordinal);
-            foreach (string name in new[] { "RefreshInterval", "ShowRemaining", "AutoStart", "Currency", "ExchangeRate" })
+            foreach (string name in new[] { "RefreshInterval", "ShowRemaining", "AutoStart", "Currency", "ExchangeRate", "AutoExchangeRate" })
                 if (fields.ContainsKey(name) && fields[name] == null) throw new InvalidOperationException("设置值不能为 null");
+            if (fields.ContainsKey("AutoExchangeRate") && !(fields["AutoExchangeRate"] is bool))
+                throw new InvalidOperationException("汇率模式无效");
             return value;
         }
 
@@ -101,6 +103,7 @@ namespace CodexTrayStatus
                 AutoStart = has("AutoStart") ? patch.AutoStart : current.AutoStart,
                 Currency = has("Currency") ? patch.Currency : current.Currency,
                 ExchangeRate = has("ExchangeRate") ? patch.ExchangeRate : current.ExchangeRate,
+                AutoExchangeRate = has("AutoExchangeRate") ? patch.AutoExchangeRate : current.AutoExchangeRate,
                 Reminders = ReminderPreferences.Merge(current.Reminders, patch.Reminders),
                 TaskbarDisplay = TaskbarDisplayPreferences.Merge(current.TaskbarDisplay, patch.TaskbarDisplay)
             };

@@ -25,6 +25,9 @@ namespace CodexTrayStatus
         internal Func<string> RebuildReminders;
         internal Func<string, string, QuotaHistoryResult> QuotaHistoryRequested;
         internal Func<Dictionary<string, ModelPrice>, string> SavePricing;
+        internal Func<ModelRadarPricingState> PricingStateRequested;
+        internal Func<ExchangeRateState> ExchangeRateStateRequested;
+        internal Action RatesRefreshRequested;
         internal Func<Task<ResetAnnouncementsResult>> ResetAnnouncementsRequested;
         private volatile ReminderStatus reminderStatus;
         internal void PublishReminderStatus(ReminderStatus value) { reminderStatus = value; }
@@ -51,7 +54,9 @@ namespace CodexTrayStatus
                 QuotaValidity = validity, UsageValidity = DataFreshness.EvaluateUsage(snapshot.UsageState, snapshot.Daily != null, now), EvaluatedAt = now,
                 Daily = snapshot.Daily, RefreshedAt = snapshot.RefreshedAt, Error = snapshot.Error ?? (snapshot.Quota == null ? null : snapshot.Quota.Warning),
                 Quota = snapshot.Quota == null ? null : snapshot.Quota.Limits, Today = snapshot.UsageState != null && snapshot.UsageState.CoverageEndDate != DateTime.Today.ToString("yyyy-MM-dd") ? null : snapshot.Today,
-                LocalDate = DateTime.Today.ToString("yyyy-MM-dd"), PricingDate = "2026-09-06"
+                LocalDate = DateTime.Today.ToString("yyyy-MM-dd"), PricingDate = "2026-09-06",
+                Pricing = PricingStateRequested == null ? null : PricingStateRequested(),
+                ExchangeRate = ExchangeRateStateRequested == null ? null : ExchangeRateStateRequested()
             });
         }
 
@@ -152,6 +157,8 @@ namespace CodexTrayStatus
                                 }
                                 if (path == "api/refresh" && RefreshRequested != null)
                                 { RefreshRequested(); Respond(stream, 200, "application/json", Encoding.UTF8.GetBytes("{}")); return; }
+                                if (path == "api/rates/refresh" && RatesRefreshRequested != null)
+                                { RatesRefreshRequested(); Respond(stream, 200, "application/json", Encoding.UTF8.GetBytes("{}")); return; }
                                 if (path == "api/reminders/rebuild" && RebuildReminders != null)
                                 {
                                     string error = RebuildReminders();

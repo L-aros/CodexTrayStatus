@@ -29,6 +29,8 @@ $arguments = @(
     (Join-Path $projectRoot "native\DataFreshness.cs"),
     (Join-Path $projectRoot "native\QuotaHistoryStore.cs"),
     (Join-Path $projectRoot "native\PricingCatalog.cs"),
+    (Join-Path $projectRoot "native\ModelRadarPricingService.cs"),
+    (Join-Path $projectRoot "native\ExchangeRateService.cs"),
     (Join-Path $projectRoot "native\QuotaService.cs"),
     (Join-Path $projectRoot "tests-native\QuotaServiceSmoke.cs")
 )
@@ -37,6 +39,16 @@ $arguments = @(
 if ($LASTEXITCODE -ne 0) { throw "Native smoke-test compilation failed." }
 & $testOutput
 if ($LASTEXITCODE -ne 0) { throw "Native smoke tests failed." }
+
+foreach ($pricingTest in @('PricingCatalogSmoke', 'ModelRadarPricingSmoke', 'ExchangeRateSmoke')) {
+    $pricingOutput = Join-Path $projectRoot ('artifacts\tests\' + $pricingTest + '.exe')
+    $pricingArguments = @("/out:$pricingOutput") + @($arguments | Where-Object { $_ -notlike '/out:*' -and $_ -notlike '*QuotaServiceSmoke.cs' })
+    $pricingArguments += (Join-Path $projectRoot ('tests-native\' + $pricingTest + '.cs'))
+    & (Join-Path $frameworkRoot 'csc.exe') $pricingArguments
+    if ($LASTEXITCODE -ne 0) { throw "$pricingTest compilation failed." }
+    & $pricingOutput
+    if ($LASTEXITCODE -ne 0) { throw "$pricingTest failed." }
+}
 
 $freshnessOutput = Join-Path $projectRoot 'artifacts\tests\DataFreshnessSmoke.exe'
 $freshnessArguments = @("/out:$freshnessOutput") + @($arguments | Where-Object { $_ -notlike '/out:*' -and $_ -notlike '*QuotaServiceSmoke.cs' })
@@ -100,6 +112,14 @@ if ($LASTEXITCODE -ne 0) { throw 'Taskbar test compilation failed.' }
 & $taskbarOutput (Join-Path $projectRoot 'artifacts\tests\taskbar')
 if ($LASTEXITCODE -ne 0) { throw 'Taskbar tests failed.' }
 
+$windowEventsOutput = Join-Path $projectRoot 'artifacts\tests\TaskbarWindowEventsSmoke.exe'
+$windowEventsArguments = @("/out:$windowEventsOutput", '/main:CodexTrayStatus.TaskbarWindowEventsSmoke') + @($dashboardArguments | Where-Object { $_ -notlike '/out:*' -and $_ -notlike '/main:*' -and $_ -notlike '*DashboardFormSmoke.cs' })
+$windowEventsArguments += (Join-Path $projectRoot 'tests-native\TaskbarWindowEventsSmoke.cs')
+& (Join-Path $frameworkRoot 'csc.exe') $windowEventsArguments
+if ($LASTEXITCODE -ne 0) { throw 'Taskbar window event test compilation failed.' }
+& $windowEventsOutput
+if ($LASTEXITCODE -ne 0) { throw 'Taskbar window event tests failed.' }
+
 $resetOutput = Join-Path $projectRoot 'artifacts\tests\ResetAnnouncementsSmoke.exe'
 $resetArguments = @('/out:' + $resetOutput) + @($arguments | Where-Object { $_ -notlike '/out:*' -and $_ -notlike '*QuotaServiceSmoke.cs' })
 $resetArguments += (Join-Path $projectRoot 'native\ResetAnnouncementsService.cs'), (Join-Path $projectRoot 'tests-native\ResetAnnouncementsSmoke.cs')
@@ -127,5 +147,9 @@ if ($nodeCommand) {
     if ($LASTEXITCODE -ne 0) { throw 'Public reset display tests failed.' }
     & $nodeCommand.Source (Join-Path $projectRoot 'tests-native\WebTaskbarSmoke.js')
     if ($LASTEXITCODE -ne 0) { throw 'Web taskbar display tests failed.' }
+    & $nodeCommand.Source (Join-Path $projectRoot 'tests-native\WebPricingSmoke.js')
+    if ($LASTEXITCODE -ne 0) { throw 'Web pricing display tests failed.' }
+    & $nodeCommand.Source (Join-Path $projectRoot 'tests-native\WebExchangeRateSmoke.js')
+    if ($LASTEXITCODE -ne 0) { throw 'Web exchange rate display tests failed.' }
 }
 else { Write-Host 'Node is unavailable; optional web display tests skipped.' }

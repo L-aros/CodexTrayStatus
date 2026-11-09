@@ -9,6 +9,7 @@ namespace CodexTrayStatus
         public bool AutoStart { get; set; }
         public string Currency { get; set; }
         public decimal ExchangeRate { get; set; }
+        public bool AutoExchangeRate { get; set; }
         public ReminderPreferences Reminders { get; set; }
         public TaskbarDisplayPreferences TaskbarDisplay { get; set; }
         public long Revision { get; set; }

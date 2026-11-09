@@ -24,6 +24,8 @@ namespace CodexTrayStatus
         private readonly ToolStripMenuItem autoStartItem;
         private readonly StatisticsServer statistics = new StatisticsServer();
         private readonly ResetAnnouncementsService resetAnnouncements = new ResetAnnouncementsService();
+        private readonly ModelRadarPricingService modelRadarPricing = new ModelRadarPricingService();
+        private readonly ExchangeRateService exchangeRates = new ExchangeRateService();
         private readonly ReminderCoordinator reminders;
         private readonly QuotaHistoryStore quotaHistory;
         private ReminderPreferences reminderPreferences;
@@ -33,6 +35,9 @@ namespace CodexTrayStatus
         private int refreshIntervalSeconds;
         private bool showRemaining;
         private bool changingAutoStart;
+        private bool autoExchangeRate = true;
+        private decimal manualExchangeRate = 7m;
+        private bool refreshRatesRequested;
         private int refreshing;
         private int exiting;
         private string statusIconKey;
@@ -50,9 +55,11 @@ namespace CodexTrayStatus
                     CurrencyDisplay.Currency = Convert.ToString(key.GetValue("Currency", "USD")) == "CNY" ? "CNY" : "USD";
                     decimal rate;
                     if (decimal.TryParse(Convert.ToString(key.GetValue("ExchangeRate", "7")), NumberStyles.Number, CultureInfo.InvariantCulture, out rate) && rate >= 0.01m && rate <= 100m)
-                        CurrencyDisplay.ExchangeRate = rate;
+                        manualExchangeRate = rate;
+                    autoExchangeRate = Convert.ToString(key.GetValue("AutoExchangeRate", "1"), CultureInfo.InvariantCulture) != "0";
                 }
             }
+            ApplyEffectiveExchangeRate();
             taskbarSettings = new TaskbarSettingsStore(delegate {
                 using (RegistryKey key = Registry.CurrentUser.OpenSubKey(PreferencesRegistryPath)) return key == null ? null : key.GetValue("TaskbarDisplayV1");
             }, delegate(string json) {
@@ -83,7 +90,7 @@ namespace CodexTrayStatus
             settingsItem.Click += delegate { OpenDashboard(DashboardPage.Settings); };
             contextMenu.Items.Add(settingsItem);
             ToolStripMenuItem refreshItem = new ToolStripMenuItem("立即刷新");
-            refreshItem.Click += async delegate { await RefreshAsync(false); };
+            refreshItem.Click += async delegate { await RefreshAsync(false, true); };
             contextMenu.Items.Add(refreshItem);
             contextMenu.Items.Add(autoStartItem);
             ToolStripMenuItem pause = new ToolStripMenuItem("暂停额度提醒");
@@ -124,6 +131,9 @@ namespace CodexTrayStatus
             })); };
             statistics.QuotaHistoryRequested = delegate(string range, string account) { return quotaHistory.Query(range, account, DataFreshness.Now); };
             statistics.ResetAnnouncementsRequested = delegate { return resetAnnouncements.GetAsync(); };
+            statistics.PricingStateRequested = delegate { return modelRadarPricing.Status; };
+            statistics.ExchangeRateStateRequested = delegate { return exchangeRates.Status; };
+            statistics.RatesRefreshRequested = delegate { overlay.BeginInvoke(new Action(async delegate { await RefreshAsync(true, true); })); };
             statistics.SavePricing = delegate(System.Collections.Generic.Dictionary<string, ModelPrice> values) { return (string)overlay.Invoke(new Func<string>(delegate { return SavePricingOverrides(values); })); };
             PublishWebPreferences();
 
@@ -140,17 +150,37 @@ namespace CodexTrayStatus
             overlay.BeginInvoke(new Action(async delegate { await RefreshAsync(true); }));
         }
 
-        private async Task RefreshAsync(bool silent)
+        private async Task RefreshAsync(bool silent, bool forceRates = false)
         {
             if (Interlocked.CompareExchange(ref exiting, 0, 0) != 0) return;
+            if (forceRates) refreshRatesRequested = true;
             if (Interlocked.CompareExchange(ref refreshing, 1, 0) != 0) return;
+            bool refreshMarketRates = refreshRatesRequested;
+            refreshRatesRequested = false;
             RefreshState attempt = new RefreshState { AttemptId = Guid.NewGuid().ToString("N"), AttemptedAt = DataFreshness.Now, IsRefreshing = true };
             if (snapshot == null) snapshot = new AppSnapshot();
             snapshot.RefreshState = attempt;
             ApplySnapshotOnUiThread();
             try
             {
-                AppSnapshot value = await quotaService.RefreshAsync();
+                Task<bool> pricingTask = modelRadarPricing.RefreshAsync(refreshMarketRates);
+                Task<bool> exchangeTask = exchangeRates.RefreshAsync(refreshMarketRates);
+                Task<AppSnapshot> quotaTask = quotaService.RefreshAsync();
+                bool pricesChanged = await pricingTask;
+                await exchangeTask;
+                ApplyEffectiveExchangeRate();
+                if (pricesChanged) quotaService.InvalidateUsageCache();
+                AppSnapshot value = await quotaTask;
+                if (pricesChanged)
+                {
+                    // Cached session summaries include costs. Refresh them even when
+                    // the logs themselves did not change after a new price snapshot.
+                    if (value.Daily != null)
+                    {
+                        value.Daily = await quotaService.FetchDailyUsageAsync();
+                        value.Today = value.Daily.Find(delegate(DailyUsage day) { return day.Date == DateTime.Today; }) ?? new TodayUsage();
+                    }
+                }
                 attempt.IsRefreshing = false;
                 attempt.CompletedAt = DataFreshness.Now;
                 value.RefreshState = attempt;
@@ -172,6 +202,13 @@ namespace CodexTrayStatus
             finally
             {
                 Interlocked.Exchange(ref refreshing, 0);
+                if (Interlocked.CompareExchange(ref exiting, 0, 0) == 0)
+                {
+                    ApplyEffectiveExchangeRate();
+                    ApplySnapshotOnUiThread();
+                    if (refreshRatesRequested)
+                        overlay.BeginInvoke(new Action(async delegate { await RefreshAsync(true); }));
+                }
             }
         }
 
@@ -262,8 +299,10 @@ namespace CodexTrayStatus
             try { preferences = WebPreferencePatch.Merge(CurrentWebPreferences(), preferences); }
             catch (Exception error) { return error.Message; }
             WebPreferences previous = CurrentWebPreferences();
+            decimal previousManualExchangeRate = manualExchangeRate;
+            decimal nextManualExchangeRate = preferences.AutoExchangeRate ? manualExchangeRate : preferences.ExchangeRate;
             bool intervalChanged = previous.RefreshInterval != preferences.RefreshInterval || previous.ShowRemaining != preferences.ShowRemaining;
-            bool currencyChanged = previous.Currency != preferences.Currency || previous.ExchangeRate != preferences.ExchangeRate;
+            bool currencyChanged = previous.Currency != preferences.Currency || previous.AutoExchangeRate != preferences.AutoExchangeRate || previousManualExchangeRate != nextManualExchangeRate;
             bool autoStartChanged = previous.AutoStart != preferences.AutoStart;
             try
             {
@@ -274,7 +313,8 @@ namespace CodexTrayStatus
                     {
                         if (currencyChanged) {
                             key.SetValue("Currency", preferences.Currency);
-                            key.SetValue("ExchangeRate", preferences.ExchangeRate.ToString(CultureInfo.InvariantCulture));
+                            key.SetValue("ExchangeRate", nextManualExchangeRate.ToString(CultureInfo.InvariantCulture));
+                            key.SetValue("AutoExchangeRate", preferences.AutoExchangeRate ? 1 : 0);
                         }
                         if (saveReminders) key.SetValue("RemindersV1", new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(preferences.Reminders));
                     }
@@ -292,7 +332,8 @@ namespace CodexTrayStatus
                         using (RegistryKey key = Registry.CurrentUser.CreateSubKey(PreferencesRegistryPath)) {
                             if (currencyChanged) {
                                 key.SetValue("Currency", previous.Currency);
-                                key.SetValue("ExchangeRate", previous.ExchangeRate.ToString(CultureInfo.InvariantCulture));
+                                key.SetValue("ExchangeRate", previousManualExchangeRate.ToString(CultureInfo.InvariantCulture));
+                                key.SetValue("AutoExchangeRate", previous.AutoExchangeRate ? 1 : 0);
                             }
                             if (saveReminders) key.SetValue("RemindersV1", new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(previous.Reminders));
                         }
@@ -305,7 +346,9 @@ namespace CodexTrayStatus
             reminderPreferences = preferences.Reminders;
             if (saveReminders) reminderSettingsError = null;
             CurrencyDisplay.Currency = preferences.Currency;
-            CurrencyDisplay.ExchangeRate = preferences.ExchangeRate;
+            autoExchangeRate = preferences.AutoExchangeRate;
+            manualExchangeRate = nextManualExchangeRate;
+            ApplyEffectiveExchangeRate();
             changingAutoStart = true;
             autoStartItem.Checked = preferences.AutoStart;
             changingAutoStart = false;
@@ -320,11 +363,23 @@ namespace CodexTrayStatus
         {
             return new WebPreferences { RefreshInterval = refreshIntervalSeconds, ShowRemaining = showRemaining,
                 AutoStart = autoStartItem != null && autoStartItem.Checked, Currency = CurrencyDisplay.Currency,
-                ExchangeRate = CurrencyDisplay.ExchangeRate, Reminders = reminderPreferences,
+                ExchangeRate = CurrencyDisplay.ExchangeRate, AutoExchangeRate = autoExchangeRate, Reminders = reminderPreferences,
                 TaskbarDisplay = taskbarSettings.Current, TaskbarSettingsError = taskbarSettings.Error };
         }
 
         private void PublishWebPreferences() { statistics.PublishPreferences(CurrentWebPreferences()); }
+
+        private void ApplyEffectiveExchangeRate()
+        {
+            ExchangeRateState state = exchangeRates.Status;
+            decimal rate = autoExchangeRate && state.Available ? state.Rate : manualExchangeRate;
+            if (CurrencyDisplay.ExchangeRate == rate) return;
+            CurrencyDisplay.ExchangeRate = rate;
+            // Cached rates are applied before the overlay/settings store is created.
+            if (taskbarSettings == null || overlay == null) return;
+            PublishWebPreferences();
+            overlay.ApplyPreferences(CurrentWebPreferences());
+        }
 
         private void LoadPricingOverrides()
         {

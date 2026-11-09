@@ -16,7 +16,7 @@ internal static class WebDashboardSmoke
     {
         using (StatisticsServer server = new StatisticsServer())
         {
-            WebPreferences preferences = new WebPreferences { RefreshInterval = 60, ShowRemaining = true, AutoStart = false, Currency = "USD", ExchangeRate = 7m };
+            WebPreferences preferences = new WebPreferences { RefreshInterval = 60, ShowRemaining = true, AutoStart = false, Currency = "USD", ExchangeRate = 7m, AutoExchangeRate = true };
             preferences.Reminders = ReminderPreferences.Merge(null, null);
             server.PublishPreferences(preferences);
             server.SavePreferences = delegate(WebPreferences value) { preferences = WebPreferencePatch.Merge(preferences, value); server.PublishPreferences(preferences); return null; };
@@ -36,6 +36,16 @@ internal static class WebDashboardSmoke
                 };
             };
             server.SavePricing = delegate(Dictionary<string, ModelPrice> prices) { PricingCatalog.Replace(prices); return null; };
+            server.PricingStateRequested = delegate { return new ModelRadarPricingState {
+                Available = true, Stale = true, EffectiveDate = "2026-10-31", FetchedAt = 1793404800000L,
+                ModelCount = 2, RejectedModelCount = 1, ErrorCode = "fetch_failed"
+            }; };
+            server.ExchangeRateStateRequested = delegate { return new ExchangeRateState {
+                Available = true, Stale = false, Rate = 6.6483m, AsOf = "2026-11-02", FetchedAt = 1793664000000L,
+                Source = "European Central Bank", SourceUrl = "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html"
+            }; };
+            int rateRefreshes = 0;
+            server.RatesRefreshRequested = delegate { rateRefreshes++; };
             server.ResetAnnouncementsRequested = delegate { return Task.FromResult(new ResetAnnouncementsResult { Available = true, Status = new { latest_reset = new { id = "fixture-reset" } }, Recent = new object[0] }); };
             server.PublishReminderStatus(new ReminderStatus { StorageAvailable = true });
             int refreshes = 0;
@@ -75,9 +85,21 @@ internal static class WebDashboardSmoke
                 string freshnessJson = client.DownloadString(server.Url + "api/usage");
                 Check(freshnessJson.Contains("\"QuotaState\"") && freshnessJson.Contains("\"UsageState\"") && freshnessJson.Contains("\"QuotaValidity\"") && freshnessJson.Contains("unknown_account"), "API must expose explicit unknown validity for legacy snapshots");
                 Check(freshnessJson.Contains("\"Quota\":["), "Quota array contract must remain compatible");
+                Dictionary<string, object> pricingMetadata = (Dictionary<string, object>)((Dictionary<string, object>)new System.Web.Script.Serialization.JavaScriptSerializer().DeserializeObject(freshnessJson))["Pricing"];
+                Check((bool)pricingMetadata["Available"] && (bool)pricingMetadata["Stale"] &&
+                    (string)pricingMetadata["EffectiveDate"] == "2026-10-31" && Convert.ToInt32(pricingMetadata["ModelCount"]) == 2 &&
+                    Convert.ToInt32(pricingMetadata["RejectedModelCount"]) == 1,
+                    "Usage API must expose remote pricing metadata without replacing manual override API");
+                Check(freshnessJson.Contains("\"ExchangeRate\":{\"Available\":true") && freshnessJson.Contains("6.6483") && freshnessJson.Contains("2026-11-02"),
+                    "Usage API exposes exchange rate value, reference date and source");
                 string updated = client.UploadString(server.Url + "api/preferences", "POST", "{\"RefreshInterval\":30,\"ShowRemaining\":false,\"AutoStart\":false,\"Currency\":\"CNY\",\"ExchangeRate\":7.25}");
                 Check(updated.Contains("CNY") && preferences.ExchangeRate == 7.25m, "Currency and settings changes must persist");
                 Check(preferences.Reminders.Enabled == true, "Old clients preserve reminder defaults");
+                Check(preferences.AutoExchangeRate, "Old clients preserve automatic exchange mode");
+                client.UploadString(server.Url + "api/preferences", "POST", "{\"AutoExchangeRate\":false}");
+                Check(!preferences.AutoExchangeRate && preferences.ExchangeRate == 7.25m, "Manual exchange mode persists without resetting rate");
+                client.UploadString(server.Url + "api/preferences", "POST", "{\"AutoExchangeRate\":true}");
+                Check(preferences.AutoExchangeRate, "Automatic exchange mode can be restored");
                 client.UploadString(server.Url + "api/preferences", "POST", "{\"TaskbarDisplay\":{\"SelectionMode\":\"selected\",\"SelectedWindowKey\":\"fixture-week\",\"ShowCost\":false}}");
                 Check(preferences.Currency == "CNY" && preferences.ExchangeRate == 7.25m && preferences.Reminders.Enabled == true, "Taskbar patch preserves currency and reminders");
                 string preview = client.DownloadString(server.Url + "api/taskbar-preview");
@@ -99,6 +121,8 @@ internal static class WebDashboardSmoke
                 Check(rebuilds == 1, "Explicit rebuild endpoint");
                 client.UploadString(server.Url + "api/refresh", "POST", "{}");
                 Check(refreshes == 1, "Refresh endpoint must request a refresh");
+                client.UploadString(server.Url + "api/rates/refresh", "POST", "{}");
+                Check(rateRefreshes == 1, "Explicit exchange and pricing refresh endpoint");
                 bool rejected = false;
                 try { client.UploadString(server.Url + "api/preferences", "POST", "{\"RefreshInterval\":1}"); }
                 catch (WebException) { rejected = true; }
@@ -108,6 +132,10 @@ internal static class WebDashboardSmoke
                 try { client.UploadString(server.Url + "api/refresh", "POST", "{}"); }
                 catch (WebException) { rejected = true; }
                 Check(rejected && refreshes == 1, "Cross-origin writes must be rejected");
+                rejected = false;
+                try { client.UploadString(server.Url + "api/rates/refresh", "POST", "{}"); }
+                catch (WebException) { rejected = true; }
+                Check(rejected && rateRefreshes == 1, "Cross-origin price refresh must be rejected");
                 rejected = false;
                 try { client.UploadString(server.Url + "api/reminders/rebuild", "POST", "{}"); }
                 catch (WebException) { rejected = true; }
@@ -120,7 +148,7 @@ internal static class WebDashboardSmoke
             Console.WriteLine("Web dashboard API tests passed.");
             if (args.Length > 0 && args[0] == "--serve")
             {
-                preferences.Currency = "USD"; preferences.Reminders = ReminderPreferences.Merge(null, null); preferences.TaskbarDisplay = TaskbarDisplayPreferences.Merge(null, null); server.PublishPreferences(preferences);
+                preferences.Currency = "USD"; preferences.AutoExchangeRate = false; preferences.Reminders = ReminderPreferences.Merge(null, null); preferences.TaskbarDisplay = TaskbarDisplayPreferences.Merge(null, null); server.PublishPreferences(preferences);
                 if (Array.IndexOf(args, "--live") >= 0)
                 {
                     AppSnapshot live = new QuotaService().RefreshAsync().GetAwaiter().GetResult();

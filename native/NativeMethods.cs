@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace CodexTrayStatus
 {
@@ -44,6 +45,25 @@ namespace CodexTrayStatus
 
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetShellWindow();
+
+        [DllImport("user32.dll")]
+        internal static extern IntPtr GetDesktopWindow();
+
+        internal delegate void WinEventProc(IntPtr hook, uint eventType, IntPtr window,
+            int objectId, int childId, uint eventThread, uint eventTime);
+
+        [DllImport("user32.dll")]
+        internal static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr module,
+            WinEventProc callback, uint processId, uint threadId, uint flags);
+
+        [DllImport("user32.dll")]
+        internal static extern bool UnhookWinEvent(IntPtr hook);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern int GetClassName(IntPtr window, StringBuilder className, int count);
 
         [DllImport("user32.dll")]
         private static extern IntPtr MonitorFromWindow(IntPtr window, uint flags);
@@ -181,6 +201,22 @@ namespace CodexTrayStatus
 
         internal static bool IsForegroundFullScreen(IntPtr taskbarWindow, IntPtr overlayWindow)
         {
+            return IsForegroundFullScreen(taskbarWindow, overlayWindow, GetForegroundWindow());
+        }
+
+        internal static bool IsForegroundFullScreen(IntPtr taskbarWindow, IntPtr overlayWindow, IntPtr foreground)
+        {
+            if (foreground == IntPtr.Zero || foreground == taskbarWindow || foreground == overlayWindow ||
+                !IsWindowVisible(foreground)) return false;
+
+            // Show Desktop focuses Progman or WorkerW, whose bounds cover the monitor.
+            // They are desktop surfaces, even when the shell reports presentation mode.
+            if (foreground == GetShellWindow() || foreground == GetDesktopWindow()) return false;
+            StringBuilder className = new StringBuilder(256);
+            GetClassName(foreground, className, className.Capacity);
+            string name = className.ToString();
+            if (name == "Progman" || name == "WorkerW") return false;
+
             int notificationState;
             try
             {
@@ -190,17 +226,19 @@ namespace CodexTrayStatus
             }
             catch { }
 
-            IntPtr foreground = GetForegroundWindow();
-            if (foreground == IntPtr.Zero || foreground == taskbarWindow || foreground == overlayWindow ||
-                !IsWindowVisible(foreground)) return false;
-
             // Borderless full-screen windows commonly do not set the shell's D3D
             // notification state. Compare against the monitor containing our taskbar.
             Rectangle monitor;
             Rect window;
             if (!TryGetMonitorBounds(taskbarWindow, out monitor) || !GetWindowRect(foreground, out window))
                 return false;
-            return window.Left <= monitor.Left + 2 && window.Top <= monitor.Top + 2 &&
+            return IsFullScreenBounds(Rectangle.FromLTRB(window.Left, window.Top, window.Right, window.Bottom), monitor);
+        }
+
+        internal static bool IsFullScreenBounds(Rectangle window, Rectangle monitor)
+        {
+            return window.Width > 0 && window.Height > 0 && monitor.Width > 0 && monitor.Height > 0 &&
+                window.Left <= monitor.Left + 2 && window.Top <= monitor.Top + 2 &&
                 window.Right >= monitor.Right - 2 && window.Bottom >= monitor.Bottom - 2;
         }
 

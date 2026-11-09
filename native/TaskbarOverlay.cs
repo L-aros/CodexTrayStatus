@@ -12,6 +12,7 @@ namespace CodexTrayStatus
     {
         private readonly Timer maintainTimer;
         private readonly Timer zOrderTimer;
+        private TaskbarWindowEvents windowEvents;
         private AppSnapshot snapshot;
         private Rectangle lastTaskbar;
         private Rectangle lastNotification;
@@ -82,7 +83,17 @@ namespace CodexTrayStatus
         private void UpdateTimers()
         {
             if (timerDisposed) return;
-            maintainTimer.Enabled = zOrderTimer.Enabled = started && ExtendedDisplay;
+            bool enabled = started && ExtendedDisplay;
+            maintainTimer.Enabled = zOrderTimer.Enabled = enabled;
+            if (enabled && windowEvents == null) windowEvents = new TaskbarWindowEvents(MaintainZOrder);
+            if (!enabled) StopWindowEvents();
+        }
+
+        private void StopWindowEvents()
+        {
+            if (windowEvents == null) return;
+            windowEvents.Dispose();
+            windowEvents = null;
         }
 
         internal bool TryGetAnchorBounds(out Rectangle bounds)
@@ -106,6 +117,7 @@ namespace CodexTrayStatus
 
         internal void Stop()
         {
+            StopWindowEvents();
             if (!timerDisposed)
             {
                 maintainTimer.Stop();
@@ -120,6 +132,7 @@ namespace CodexTrayStatus
 
         protected override void Dispose(bool disposing)
         {
+            if (disposing) StopWindowEvents();
             if (disposing && !timerDisposed)
             {
                 maintainTimer.Dispose();
@@ -170,8 +183,12 @@ namespace CodexTrayStatus
 
         private void MaintainZOrder()
         {
-            if (IsDisposed || !IsHandleCreated || !nativeVisible || lastTaskbarWindow == IntPtr.Zero ||
-                lastNativeBounds.IsEmpty) return;
+            if (IsDisposed || !IsHandleCreated || !started || !ExtendedDisplay) return;
+            if (!nativeVisible || lastTaskbarWindow == IntPtr.Zero || lastNativeBounds.IsEmpty)
+            {
+                SafeRender(false);
+                return;
+            }
             try
             {
                 Rectangle taskbar;
@@ -179,8 +196,14 @@ namespace CodexTrayStatus
                 IntPtr taskbarWindow;
                 bool found = NativeMethods.TryGetTaskbarLayout(out taskbar, out notification, out taskbarWindow);
                 if (!TaskbarSurface.Matches(found, taskbarWindow, taskbar, notification,
-                    lastTaskbarWindow, lastTaskbar, lastNotification) ||
-                    NativeMethods.IsTaskbarAutoHidden(taskbar, taskbarWindow) ||
+                    lastTaskbarWindow, lastTaskbar, lastNotification))
+                {
+                    // Revalidate and compose against the new geometry in this pass.
+                    // Hiding first leaves a blank until the slower render timer fires.
+                    SafeRender(false);
+                    return;
+                }
+                if (NativeMethods.IsTaskbarAutoHidden(taskbar, taskbarWindow) ||
                     NativeMethods.IsForegroundFullScreen(taskbarWindow, Handle))
                 {
                     HideNative();

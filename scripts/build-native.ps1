@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = "0.4.7",
+    [string]$Version = "0.4.8",
     [switch]$SkipInstaller,
     [string]$NativeOutputDirectory = "native"
 )
@@ -58,6 +58,7 @@ $referenceNames = @(
     "System.Drawing.dll",
     "System.Windows.Forms.dll",
     "System.Net.Http.dll",
+    "System.Xml.dll",
     "System.Web.Extensions.dll"
 )
 $compilerArguments = @(

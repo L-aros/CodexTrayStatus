@@ -9,6 +9,10 @@ namespace CodexTrayStatus
     {
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern uint GetGuiResources(IntPtr process, uint flags);
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr GetShellWindow();
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr GetDesktopWindow();
         private static int checks;
         private static void Check(bool condition, string message) { checks++; if (!condition) throw new Exception(message); }
         private static void Reject(Action action, string message) { bool rejected = false; try { action(); } catch { rejected = true; } Check(rejected, message); }
@@ -22,6 +26,7 @@ namespace CodexTrayStatus
         }
         private static int Run(string[] args)
         {
+            CheckFullScreenSuppression();
             Rectangle bar = new Rectangle(-1920, 1040, 1920, 40);
             Rectangle tray = new Rectangle(-200, 1040, 200, 40);
             IntPtr shell = new IntPtr(42);
@@ -125,6 +130,13 @@ namespace CodexTrayStatus
             WebPreferences current = Preferences(); current.Currency = "CNY"; current.ExchangeRate = 7.25m; current.Reminders.Enabled = false;
             WebPreferences merged = WebPreferencePatch.Merge(current, WebPreferencePatch.Parse("{\"TaskbarDisplay\":{\"ShowCost\":false}}"));
             Check(merged.Currency == "CNY" && merged.ExchangeRate == 7.25m && merged.Reminders.Enabled == false && merged.TaskbarDisplay.ShowCost == false, "Taskbar-only patch preserves other preferences");
+            current.AutoExchangeRate = true;
+            WebPreferences exchangeMerged = WebPreferencePatch.Merge(current, WebPreferencePatch.Parse("{\"Currency\":\"USD\"}"));
+            Check(exchangeMerged.AutoExchangeRate && exchangeMerged.ExchangeRate == 7.25m, "Unrelated patch preserves automatic exchange mode and rate");
+            exchangeMerged = WebPreferencePatch.Merge(current, WebPreferencePatch.Parse("{\"AutoExchangeRate\":false,\"ExchangeRate\":6.5}"));
+            Check(!exchangeMerged.AutoExchangeRate && exchangeMerged.ExchangeRate == 6.5m, "Manual exchange patch updates mode and value");
+            Reject(() => WebPreferencePatch.Parse("{\"AutoExchangeRate\":null}"), "Null exchange mode rejected");
+            Reject(() => WebPreferencePatch.Parse("{\"AutoExchangeRate\":\"false\"}"), "String exchange mode rejected");
             merged = WebPreferencePatch.Merge(merged, WebPreferencePatch.Parse("{\"Currency\":\"USD\",\"TaskbarDisplay\":null}"));
             Check(merged.TaskbarDisplay.ShowCost == false, "Missing/null taskbar preserves false");
             Reject(() => WebPreferencePatch.Merge(current, WebPreferencePatch.Parse("{\"RefreshInterval\":1}")), "Invalid base patch rejected");
@@ -184,6 +196,44 @@ namespace CodexTrayStatus
             }
             Console.WriteLine("Taskbar selection, settings and offscreen layout passed: " + checks + " checks, " + images + " images.");
             return 0;
+        }
+
+        private static void CheckFullScreenSuppression()
+        {
+            Rectangle monitor = new Rectangle(0, 0, 2560, 1600);
+            Check(NativeMethods.IsFullScreenBounds(monitor, monitor), "A full-screen application covers its monitor");
+            Check(NativeMethods.IsFullScreenBounds(new Rectangle(-8, -8, 2576, 1616), monitor), "A full-screen application may extend beyond monitor edges");
+            Check(!NativeMethods.IsFullScreenBounds(new Rectangle(-8, -8, 2576, 1544), monitor), "A normal maximized application stops above the taskbar");
+            Check(!NativeMethods.IsFullScreenBounds(new Rectangle(0, 0, 1280, 1600), monitor), "A partial-screen application must not suppress the overlay");
+            Rectangle negativeMonitor = new Rectangle(-1920, -120, 1920, 1200);
+            Check(NativeMethods.IsFullScreenBounds(negativeMonitor, negativeMonitor), "Full-screen detection supports negative monitor coordinates");
+            Check(!NativeMethods.IsFullScreenBounds(negativeMonitor, monitor), "An application on another monitor must not suppress the overlay");
+            Check(!NativeMethods.IsFullScreenBounds(Rectangle.Empty, monitor), "An empty window rectangle is not full-screen");
+            Check(!NativeMethods.IsFullScreenBounds(monitor, Rectangle.Empty), "An empty monitor rectangle is not full-screen");
+
+            Rectangle taskbar, notification;
+            IntPtr taskbarWindow;
+            if (!NativeMethods.TryGetTaskbarLayout(out taskbar, out notification, out taskbarWindow))
+            {
+                Console.WriteLine("SKIP: Desktop full-screen regression checks require a visible primary taskbar with a notification area.");
+                return;
+            }
+
+            // Supply real desktop handles without activating them or changing the user's foreground window.
+            IntPtr shell = GetShellWindow();
+            IntPtr desktop = GetDesktopWindow();
+            Check(shell != IntPtr.Zero, "An interactive shell provides its desktop window");
+            Check(desktop != IntPtr.Zero, "An interactive session provides its desktop window");
+            Check(!NativeMethods.IsForegroundFullScreen(taskbarWindow, IntPtr.Zero, shell), "The full-monitor shell desktop is not a full-screen application");
+            Check(!NativeMethods.IsForegroundFullScreen(taskbarWindow, IntPtr.Zero, desktop), "The full-monitor system desktop is not a full-screen application");
+            Check(!NativeMethods.IsForegroundFullScreen(taskbarWindow, IntPtr.Zero, IntPtr.Zero), "A missing foreground window must not suppress the overlay");
+            Check(!NativeMethods.IsForegroundFullScreen(taskbarWindow, IntPtr.Zero, taskbarWindow), "The foreground taskbar must not suppress the overlay");
+            using (System.Windows.Forms.Form hidden = new System.Windows.Forms.Form())
+            {
+                IntPtr hiddenWindow = hidden.Handle;
+                Check(!NativeMethods.IsForegroundFullScreen(taskbarWindow, IntPtr.Zero, hiddenWindow), "An invisible foreground candidate must not suppress the overlay");
+                Check(!NativeMethods.IsForegroundFullScreen(taskbarWindow, hiddenWindow, hiddenWindow), "The overlay itself must not suppress the overlay");
+            }
         }
     }
 }

@@ -8,7 +8,7 @@ SetDatablockOptimize on
   !define APP_SOURCE "..\artifacts\native\CodexTrayStatus.exe"
 !endif
 !ifndef APP_VERSION
-  !define APP_VERSION "0.4.7"
+  !define APP_VERSION "0.4.8"
 !endif
 !ifndef OUTPUT_FILE
   !define OUTPUT_FILE "..\artifacts\installer\CodexTrayStatus-Setup.exe"

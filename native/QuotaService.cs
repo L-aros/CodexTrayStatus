@@ -538,7 +538,7 @@ namespace CodexTrayStatus
                     UncachedInputCost = (input - cached) * price.Input / 1000000m,
                     CachedInputCost = cached * price.Cached / 1000000m,
                     OutputCost = output * price.Output / 1000000m,
-                    UnpricedTokens = price.Input == 0 ? SafeAdd(input, output) : 0
+                    UnpricedTokens = !price.Known ? SafeAdd(input, output) : 0
                 };
                 part.EstimatedCost = part.UncachedInputCost + part.CachedInputCost + part.OutputCost;
                 AddUsage(total, part);
@@ -1057,11 +1057,19 @@ namespace CodexTrayStatus
         {
             ModelPrice custom;
             if (PricingCatalog.TryGet(model, out custom)) return new Price(custom.Input, custom.Cached, custom.Output);
+            Price builtIn = BuiltInPriceFor(model);
+            ModelPrice merged = PricingCatalog.ApplyRemote(model, builtIn.Known
+                ? new ModelPrice { Input = builtIn.Input, Cached = builtIn.Cached, Output = builtIn.Output } : null);
+            return merged == null ? default(Price) : new Price(merged.Input, merged.Cached, merged.Output);
+        }
+
+        private static Price BuiltInPriceFor(string model)
+        {
             string name = (model ?? string.Empty).ToLowerInvariant();
             // OpenAI's Codex rate card identifies auto review as GPT-5.4.
             if (name == "codex-auto-review") return new Price(2.5m, 0.25m, 15m);
             if (name == "gpt-6-astra" || name.StartsWith("gpt-6-astra-", StringComparison.Ordinal)) return new Price(10m, 1m, 50m);
-            if (name.Contains("-pro") || name.Contains("spark") || name.Contains("-nano")) return new Price(0m, 0m, 0m);
+            if (name.Contains("-pro") || name.Contains("spark") || name.Contains("-nano")) return default(Price);
             if (name.IndexOf("gpt-5.6-sol", StringComparison.Ordinal) >= 0)
             {
                 return new Price(4m, 0.4m, 20m);
@@ -1097,7 +1105,7 @@ namespace CodexTrayStatus
             }
             if (name == "gpt-5" || name == "gpt-5-codex" || name == "gpt-5.1" || name.StartsWith("gpt-5.1-codex", StringComparison.Ordinal))
                 return new Price(1.25m, 0.125m, 10m);
-            return new Price(0m, 0m, 0m);
+            return default(Price);
         }
 
         private static void AddUsage(TodayUsage total, TodayUsage part)
@@ -1176,6 +1184,7 @@ namespace CodexTrayStatus
         {
             public Price(decimal input, decimal cached, decimal output)
             {
+                Known = true;
                 Input = input;
                 Cached = cached;
                 Output = output;
@@ -1184,6 +1193,7 @@ namespace CodexTrayStatus
             public decimal Input;
             public decimal Cached;
             public decimal Output;
+            public bool Known;
         }
     }
 }

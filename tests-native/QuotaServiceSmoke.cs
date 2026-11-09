@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Net.Http;
 using CodexTrayStatus;
 
 internal static class QuotaServiceSmoke
@@ -11,6 +13,102 @@ internal static class QuotaServiceSmoke
         if (condition) return;
         Console.Error.WriteLine("FAIL: " + message);
         failures++;
+    }
+
+    private static DailyUsage PriceUsage(string model, string context, string usage)
+    {
+        return QuotaService.SummarizeDailyJsonl(new[] { context.Replace("gpt-5.4", model), usage })[0];
+    }
+
+    private static void CheckPricingPath(string context, string usage)
+    {
+        Dictionary<string, ModelPrice> previous = PricingCatalog.Snapshot();
+        string temporaryRoot = Path.Combine(Path.GetTempPath(), "codex-pricing-quota-" + Guid.NewGuid().ToString("N"));
+        string sessions = Path.Combine(temporaryRoot, "sessions");
+        string sessionPath = Path.Combine(sessions, "pricing.jsonl");
+        try
+        {
+            PricingCatalog.Replace(null);
+            PricingCatalog.ReplaceRemote(new Dictionary<string, RemoteModelPrice> {
+                { "gpt-5.4", new RemoteModelPrice { Input = 4m, Cached = 0.4m, Output = 20m } }
+            });
+            DailyUsage remote = PriceUsage("gpt-5.4", context, usage);
+            Check(remote.EstimatedCost == 0.0042m && remote.UnpricedTokens == 0,
+                "valid remote rates must override built-in rates in actual usage costs");
+            Check(remote.Models[0].InputRate == 4m && remote.Models[0].CachedRate == 0.4m && remote.Models[0].OutputRate == 20m,
+                "usage details must expose each effective remote rate");
+
+            PricingCatalog.Set("gpt-5.4", new ModelPrice { Input = 8m, Cached = 0.8m, Output = 40m });
+            Check(PriceUsage("gpt-5.4", context, usage).EstimatedCost == 0.0084m,
+                "manual override must take priority over a valid remote row");
+            PricingCatalog.Reset("gpt-5.4");
+            Check(PriceUsage("gpt-5.4", context, usage).EstimatedCost == 0.0042m,
+                "clearing a manual override must restore remote prices");
+
+            PricingCatalog.ReplaceRemote(new Dictionary<string, RemoteModelPrice> {
+                { "gpt-5.4", new RemoteModelPrice { Input = 4m, Cached = 0.4m } },
+                { "future-model", new RemoteModelPrice { Input = 2m, Cached = 0.2m } }
+            });
+            DailyUsage partial = PriceUsage("gpt-5.4", context, usage);
+            Check(partial.EstimatedCost == 0.0037m && partial.Models[0].OutputRate == 15m,
+                "missing remote output price must use the built-in output rate rather than zero");
+            DailyUsage unknown = PriceUsage("future-model", context, usage);
+            Check(unknown.UnpricedTokens == 1100 && unknown.EstimatedCost == 0m,
+                "an unknown model with an incomplete remote row must remain unpriced");
+
+            PricingCatalog.ReplaceRemote(new Dictionary<string, RemoteModelPrice> {
+                { "future-model", new RemoteModelPrice { Input = 2m, Cached = 0.2m, Output = 4m } },
+                { "free-model", new RemoteModelPrice { Input = 0m, Cached = 0m, Output = 0m } },
+                { "gpt-5.4", new RemoteModelPrice { Input = 2.5m, Cached = 15m, Output = 0.25m } }
+            });
+            DailyUsage complete = PriceUsage("future-model", context, usage);
+            Check(complete.UnpricedTokens == 0 && complete.EstimatedCost == 0.0015m,
+                "a complete remote row must price a model absent from built-ins");
+            DailyUsage free = PriceUsage("free-model", context, usage);
+            Check(free.UnpricedTokens == 0 && free.EstimatedCost == 0m && free.TotalTokens == 1100,
+                "a valid all-zero remote row must count usage without reporting unpriced tokens");
+            Check(PriceUsage("gpt-5.4", context, usage).EstimatedCost == 0.002875m,
+                "remote cached price above input must be rejected and preserve built-in cost");
+
+            PricingCatalog.ReplaceRemote(null);
+            Directory.CreateDirectory(sessions);
+            File.WriteAllLines(sessionPath, new[] { context, usage });
+            DateTime modified = File.GetLastWriteTimeUtc(sessionPath);
+            long length = new FileInfo(sessionPath).Length;
+            using (HttpClient client = new HttpClient())
+            {
+                QuotaService service = new QuotaService(client, temporaryRoot);
+                DailyUsage initial = service.FetchDailyUsageAsync().GetAwaiter().GetResult().Find(delegate(DailyUsage day) {
+                    return day.TotalTokens > 0;
+                });
+                Check(initial != null && initial.EstimatedCost == 0.002875m,
+                    "initial session scan must use built-in pricing before remote publication");
+                PricingCatalog.ReplaceRemote(new Dictionary<string, RemoteModelPrice> {
+                    { "gpt-5.4", new RemoteModelPrice { Input = 4m, Cached = 0.4m, Output = 20m } }
+                });
+                DailyUsage beforeInvalidation = service.FetchDailyUsageAsync().GetAwaiter().GetResult().Find(delegate(DailyUsage day) {
+                    return day.TotalTokens > 0;
+                });
+                Check(beforeInvalidation != null && beforeInvalidation.EstimatedCost == 0.002875m,
+                    "unchanged session files must retain the existing usage scan cache until invalidation");
+                service.InvalidateUsageCache();
+                DailyUsage refreshed = service.FetchDailyUsageAsync().GetAwaiter().GetResult().Find(delegate(DailyUsage day) {
+                    return day.TotalTokens > 0;
+                });
+                Check(refreshed != null && refreshed.EstimatedCost == 0.0042m && refreshed.TotalTokens == 1100,
+                    "invalidating scan cache must reprice unchanged session files while preserving token counts");
+                Check(File.GetLastWriteTimeUtc(sessionPath) == modified && new FileInfo(sessionPath).Length == length,
+                    "repricing must not require or modify session file timestamps or contents");
+            }
+        }
+        finally
+        {
+            PricingCatalog.Replace(previous);
+            PricingCatalog.ReplaceRemote(null);
+            if (File.Exists(sessionPath)) File.Delete(sessionPath);
+            if (Directory.Exists(sessions)) Directory.Delete(sessions);
+            if (Directory.Exists(temporaryRoot)) Directory.Delete(temporaryRoot);
+        }
     }
 
     private static void Main()
@@ -76,6 +174,7 @@ internal static class QuotaServiceSmoke
         List<DailyUsage> custom = QuotaService.SummarizeDailyJsonl(new[] { nativeContext.Replace("gpt-5.4", "future-model"), usage });
         Check(custom[0].UnpricedTokens == 0 && custom[0].EstimatedCost > 0, "local price override must price an otherwise unknown model");
         PricingCatalog.Reset("future-model");
+        CheckPricingPath(nativeContext, usage);
         string cumulativeUsage = usage.Replace("last_token_usage", "total_token_usage");
         List<DailyUsage> repeated = QuotaService.SummarizeDailyJsonl(new[] { nativeContext, cumulativeUsage,
             cumulativeUsage.Replace(stamp, DateTimeOffset.Now.AddSeconds(2).ToString("o")) });
